@@ -46,6 +46,7 @@ find_package(VTK COMPONENTS
         vtkFiltersCore
         vtkFiltersSources
         vtkFiltersModeling
+        vtkFiltersExtraction
         vtkIOXML
         QUIET)
 if (NOT VTK_FOUND)

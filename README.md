@@ -14,11 +14,15 @@ should come in the future.*
 
 ### Features
 
-Effect | VTK filter
------------- | -------------
-Smooth (Laplacian) | [`vtkSmoothPolyDataFilter`][vtkSmoothPolyDataFilter]
-Smooth (windowed sinc) | [`vtkWindowedSincPolyDataFilter`][vtkWindowedSincPolyDataFilter]
-Point sampling | [`vtkPolyDataPointSampler`][vtkPolyDataPointSampler]
+Effect | VTK filter | Description
+------------ | ------------- | -------------
+Smooth (Laplacian) | [`vtkSmoothPolyDataFilter`][vtkSmoothPolyDataFilter] | smooth vertices
+Smooth (windowed sinc) | [`vtkWindowedSincPolyDataFilter`][vtkWindowedSincPolyDataFilter] | smooth vertices (better detail preservation, doesn't shrink mesh)
+Point sampling | [`vtkPolyDataPointSampler`][vtkPolyDataPointSampler] | sample points from edges/faces at regular distance
+Feature edges | [`vtkFeatureEdges`][vtkFeatureEdges] | extract edges (boundary, feature, non-manifold)
+Fill holes | [`vtkFillHolesFilter`][vtkFillHolesFilter] | fill holes of defined size with triangle fans
+Tube filter | [`vtkTubeFilter`][vtkTubeFilter] | create polygonal wireframe from edges or faces
+Decimate (pro) | [`vtkDecimatePro`][vtkDecimatePro] | mesh decimator with many options (maximum error, preserve topology, ...)
 
 ### How to use it
 
@@ -31,9 +35,13 @@ In the [OpenMeshEffectForBlender branch of Blender][OpenMeshEffectForBlender]:
 
 ### How to build it yourself
 
-It's a CMake project with dependency on the VTK library (>=9.0). If you're
-building VTK yourself, you can point CMake to your build directory, eg.
-`-DVTK_DIR:PATH=/path/to/VTK-9.0.1-build`.
+1. Build VTK (version >= 9.0), see [instructions on VTK wiki][BuildingVTK].
+   MfxVTK only needs `vtkCommon*`, `vtkFilter*`, `vtkIOXML` modules
+   (see [CMakeLists.txt](src/mfx_vtk_plugin/CMakeLists.txt)) - you don't
+   have to build Python/Qt/OpenGL related stuff.
+2. Build MfxVTK using CMake, this should be straightforward. Be sure to point
+   CMake to your VTK build directory, eg. `-DVTK_DIR:PATH=/path/to/VTK-9.0.1-build`.
+3. The plugin is in your build directory: `src/mfx_vtk_plugin/libmfx_vtk_plugin.ofx`.
 
 🚧 *TODO better explanation*
 
@@ -74,7 +82,12 @@ see copyright notices in individual files.
 [OpenMeshEffectForBlender]: https://github.com/eliemichel/OpenMeshEffectForBlender
 [VTK]: https://vtk.org
 [MfxVCG]: https://github.com/eliemichel/MfxVCG
+[BuildingVTK]: https://vtk.org/Wiki/VTK/Configure_and_Build
 
 [vtkSmoothPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkSmoothPolyDataFilter.html
 [vtkWindowedSincPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkWindowedSincPolyDataFilter.html
 [vtkPolyDataPointSampler]: https://vtk.org/doc/nightly/html/classvtkPolyDataPointSampler.html
+[vtkFeatureEdges]: https://vtk.org/doc/nightly/html/classvtkFeatureEdges.html
+[vtkFillHolesFilter]: https://vtk.org/doc/nightly/html/classvtkFillHolesFilter.html
+[vtkTubeFilter]: https://vtk.org/doc/nightly/html/classvtkTubeFilter.html
+[vtkDecimatePro]: https://vtk.org/doc/nightly/html/classvtkDecimatePro.html
