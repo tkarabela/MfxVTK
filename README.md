@@ -16,8 +16,9 @@ should come in the future.*
 
 Effect | VTK filter
 ------------ | -------------
-Laplacian smoothing | `vtkSmoothPolyDataFilter`
-Windowed sinc smoothing | `vtkWindowedSincPolyDataFilter`
+Smooth (Laplacian) | [`vtkSmoothPolyDataFilter`][vtkSmoothPolyDataFilter]
+Smooth (windowed sinc) | [`vtkWindowedSincPolyDataFilter`][vtkWindowedSincPolyDataFilter]
+Point sampling | [`vtkPolyDataPointSampler`][vtkPolyDataPointSampler]
 
 ### How to use it
 
@@ -73,3 +74,7 @@ see copyright notices in individual files.
 [OpenMeshEffectForBlender]: https://github.com/eliemichel/OpenMeshEffectForBlender
 [VTK]: https://vtk.org
 [MfxVCG]: https://github.com/eliemichel/MfxVCG
+
+[vtkSmoothPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkSmoothPolyDataFilter.html
+[vtkWindowedSincPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkWindowedSincPolyDataFilter.html
+[vtkPolyDataPointSampler]: https://vtk.org/doc/nightly/html/classvtkPolyDataPointSampler.html

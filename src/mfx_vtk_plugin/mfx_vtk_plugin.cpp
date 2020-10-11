@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include <vtkSmartPointer.h>
 #include <vtkSmoothPolyDataFilter.h>
 #include <vtkWindowedSincPolyDataFilter.h>
+#include <vtkPolyDataPointSampler.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -49,12 +50,12 @@ public:
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
         AddParam(PARAM_ITERATIONS, 20).Range(1, 1000).Label("Iterations");
-        AddParam(PARAM_CONVERGENCE, 0.0).Range(0.0, 1000.0).Label("Convergence");
-        AddParam(PARAM_BOUNDARY_SMOOTHING, true).Label("Boundary smoothing");
         AddParam(PARAM_RELAXATION_FACTOR, 0.01).Range(0.0, 1000.0).Label("Relaxation factor");
+        AddParam(PARAM_BOUNDARY_SMOOTHING, true).Label("Boundary smoothing");
         AddParam(PARAM_FEATURE_EDGE_SMOOTHING, false).Label("Feature edge smoothing");
         AddParam(PARAM_FEATURE_ANGLE, 45.0).Range(0.001, 180.0).Label("Feature angle");
         AddParam(PARAM_EDGE_ANGLE, 15.0).Range(0.001, 180.0).Label("Edge angle");
+        AddParam(PARAM_CONVERGENCE, 0.0).Range(0.0, 1000.0).Label("Convergence");
         return kOfxStatOK;
     }
 
@@ -148,6 +149,58 @@ public:
 
 // ----------------------------------------------------------------------------
 
+class VtkPolyDataPointSamplerEffect : public VtkEffect {
+private:
+    const char *PARAM_DISTANCE = "Distance";
+    // const char *PARAM_USE_RANDOM_GENERATION_MODE = "UseRandomGenerationMode";
+    // const char *PARAM_GENERATE_VERTEX_POINTS = "GenerateVertexPoints";
+    const char *PARAM_GENERATE_EDGE_POINTS = "GenerateEdgePoints";
+    const char *PARAM_GENERATE_INTERIOR_POINTS = "GenerateInteriorPoints";
+    const char *PARAM_INTERPOLATE_POINT_DATA = "InterpolatePointData";
+
+public:
+    const char* GetName() override {
+        return "Point sampling";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_DISTANCE, 0.1).Range(1e-6, 1e6).Label("Distance");
+        // AddParam(PARAM_USE_RANDOM_GENERATION_MODE, true).Label("Random point generation");
+        // AddParam(PARAM_GENERATE_VERTEX_POINTS, true).Label("Generate vertex points");
+        AddParam(PARAM_GENERATE_EDGE_POINTS, true).Label("Generate edge points");
+        AddParam(PARAM_GENERATE_INTERIOR_POINTS, true).Label("Generate interior points");
+        AddParam(PARAM_INTERPOLATE_POINT_DATA, false).Label("Interpolate point data");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        double distance = GetParam<double>(PARAM_DISTANCE).GetValue();
+        // bool user_random_generation_mode = GetParam<bool>(PARAM_USE_RANDOM_GENERATION_MODE).GetValue();
+        bool generate_vertex_points = true; // GetParam<bool>(PARAM_GENERATE_VERTEX_POINTS).GetValue(); // false crashes VTK 9.0.1, why?
+        bool generate_edge_points = GetParam<bool>(PARAM_GENERATE_EDGE_POINTS).GetValue();
+        bool generate_interior_points = GetParam<bool>(PARAM_GENERATE_INTERIOR_POINTS).GetValue();
+        bool interpolate_point_data = GetParam<bool>(PARAM_INTERPOLATE_POINT_DATA).GetValue();
+
+        auto filter = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+        filter->SetInputData(input_polydata);
+
+        filter->SetDistance(distance);
+        filter->SetGenerateVertexPoints(generate_vertex_points);
+        filter->SetGenerateEdgePoints(generate_edge_points);
+        filter->SetGenerateInteriorPoints(generate_interior_points);
+        filter->SetInterpolatePointData(interpolate_point_data);
+        filter->SetGenerateVertices(true); // generate cells and not just points, needed for MFX conversion (?)
+
+        filter->Update();
+
+        auto filter_output = filter->GetOutput();
+        output_polydata->ShallowCopy(filter_output);
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 class VtkIdentityEffect : public VtkEffect {
 public:
     const char* GetName() override {
@@ -169,5 +222,6 @@ public:
 MfxRegister(
         VtkSmoothPolyDataFilterEffect,
         VtkWindowedSincPolyDataFilterEffect,
+        VtkPolyDataPointSamplerEffect,
         VtkIdentityEffect
 );

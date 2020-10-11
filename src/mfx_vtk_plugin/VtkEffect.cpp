@@ -147,9 +147,10 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
 
 //    {
 //        auto writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
-//        writer->SetInputData(vtk_input_polydata);
+//        writer->SetInputData(vtk_output_polydata);
 //        writer->SetFileName("test-2output.vtp");
 //        writer->Write();
+//        printf("Dumped output to test-2output.vtp\n");
 //    }
 
     // ------------------------------------------------------------------------
