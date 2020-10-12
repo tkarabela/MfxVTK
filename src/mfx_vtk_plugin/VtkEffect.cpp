@@ -29,13 +29,16 @@ THE SOFTWARE.
 #include <vtkXMLPolyDataWriter.h>
 #include <vtkCellArrayIterator.h>
 
-static void strided_copy(void *dest, void *src, int size, int count, int dest_stride, int src_stride) {
-    assert(dest != nullptr);
-    assert(src != nullptr);
+static void strided_copy(void *dest_ptr, const void *src_ptr, int size, int count, int dest_stride, int src_stride) {
+    assert(dest_ptr != nullptr);
+    assert(src_ptr != nullptr);
     assert(size > 0);
     assert(count >= 0);
     assert(dest_stride >= size);
     assert(src_stride >= size);
+
+    unsigned char *dest = static_cast<unsigned char *>(dest_ptr);
+    const unsigned char *src = static_cast<const unsigned char *>(src_ptr);
 
     if (size == dest_stride && size == src_stride) {
         memcpy(dest, src, size*count);
