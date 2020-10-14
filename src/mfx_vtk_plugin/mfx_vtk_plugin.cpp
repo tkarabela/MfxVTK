@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include <vtkDecimatePro.h>
 #include <vtkQuadricDecimation.h>
 #include <vtkQuadricClustering.h>
+#include <vtkAppendPolyData.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -192,19 +193,39 @@ public:
         bool generate_interior_points = GetParam<bool>(PARAM_GENERATE_INTERIOR_POINTS).GetValue();
         bool interpolate_point_data = GetParam<bool>(PARAM_INTERPOLATE_POINT_DATA).GetValue();
 
-        auto filter = vtkSmartPointer<vtkPolyDataPointSampler>::New();
-        filter->SetInputData(input_polydata);
+        auto append_poly_data = vtkSmartPointer<vtkAppendPolyData>::New();
 
-        filter->SetDistance(distance);
-        filter->SetGenerateVertexPoints(generate_vertex_points);
-        filter->SetGenerateEdgePoints(generate_edge_points);
-        filter->SetGenerateInteriorPoints(generate_interior_points);
-        filter->SetInterpolatePointData(interpolate_point_data);
-        filter->SetGenerateVertices(true); // generate cells and not just points, needed for MFX conversion (?)
+        auto vertex_edge_sampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+        vertex_edge_sampler->SetInputData(input_polydata);
+        vertex_edge_sampler->SetDistance(distance);
+        vertex_edge_sampler->SetGenerateVertexPoints(generate_vertex_points);
+        vertex_edge_sampler->SetGenerateEdgePoints(generate_edge_points);
+        vertex_edge_sampler->SetGenerateInteriorPoints(false);
+        vertex_edge_sampler->SetInterpolatePointData(interpolate_point_data);
+        vertex_edge_sampler->Update();
 
-        filter->Update();
+        append_poly_data->AddInputData(vertex_edge_sampler->GetOutput());
 
-        auto filter_output = filter->GetOutput();
+        if (generate_interior_points) {
+            // to handle non-convex polygons correctly, we need to triangulate first; fixes #2
+            auto triangle_filter = vtkSmartPointer<vtkTriangleFilter>::New();
+            triangle_filter->SetInputData(input_polydata);
+
+            auto face_sampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+            face_sampler->SetInputConnection(triangle_filter->GetOutputPort());
+            face_sampler->SetDistance(distance);
+            face_sampler->SetGenerateVertexPoints(false);
+            face_sampler->SetGenerateEdgePoints(false);
+            face_sampler->SetGenerateInteriorPoints(true);
+            face_sampler->SetInterpolatePointData(interpolate_point_data);
+
+            face_sampler->Update();
+            append_poly_data->AddInputData(face_sampler->GetOutput());
+        }
+
+        append_poly_data->Update();
+
+        auto filter_output = append_poly_data->GetOutput();
         output_polydata->ShallowCopy(filter_output);
         return kOfxStatOK;
     }
