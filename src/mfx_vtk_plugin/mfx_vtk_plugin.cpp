@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include <vtkCleanPolyData.h>
 #include <vtkTriangleFilter.h>
 #include <vtkDecimatePro.h>
+#include <vtkQuadricDecimation.h>
+#include <vtkQuadricClustering.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -266,6 +268,7 @@ private:
     const char *PARAM_RADIUS = "Radius";
     const char *PARAM_NUMBER_OF_SIDES = "NumberOfSides";
     const char *PARAM_CAPPING = "Capping";
+    // const char *PARAM_TUBE_BENDER = "TubeBender";
 
 public:
     const char* GetName() override {
@@ -276,6 +279,7 @@ public:
         AddParam(PARAM_RADIUS, 0.05).Range(1e-6, 1e6).Label("Radius");
         AddParam(PARAM_NUMBER_OF_SIDES, 6).Range(3, 1000).Label("Number of sides");
         AddParam(PARAM_CAPPING, true).Label("Cap ends");
+        // AddParam(PARAM_TUBE_BENDER, true).Label("Use tube bender");
         // TODO texture coordinates
         return kOfxStatOK;
     }
@@ -284,16 +288,24 @@ public:
         double radius = GetParam<double>(PARAM_RADIUS).GetValue();
         int number_of_sides = GetParam<int>(PARAM_NUMBER_OF_SIDES).GetValue();
         bool capping = GetParam<bool>(PARAM_CAPPING).GetValue();
+        // bool use_tube_bender = GetParam<bool>(PARAM_TUBE_BENDER).GetValue();
 
         // vtkExtractEdges to create lines even from polygonal mesh
         auto extract_edges_filter = vtkSmartPointer<vtkExtractEdges>::New();
         extract_edges_filter->SetInputData(input_polydata);
 
-        // TODO incorporate optional vtkTubeBender
+        auto tube_filter_input = extract_edges_filter->GetOutputPort();
+
+        // TODO incorporate optional vtkTubeBender - when it lands post VTK 9.0
+        // if (use_tube_bender) {
+        //    auto tube_bender_filter = vtkSmartPointer<vtkTubeBender>::New();
+        //    tube_bender_filter->SetInputConnection(extract_edges_filter->GetOutputPort());
+        //    tube_filter_input = tube_bender_filter->GetOutputPort();
+        // }
 
         // vtkTubeFilter to turn lines into polygonal tubes
         auto tube_filter = vtkSmartPointer<vtkTubeFilter>::New();
-        tube_filter->SetInputConnection(extract_edges_filter->GetOutputPort());
+        tube_filter->SetInputConnection(tube_filter_input);
         tube_filter->SetRadius(radius);
         tube_filter->SetNumberOfSides(number_of_sides);
         tube_filter->SetCapping(capping);
@@ -385,6 +397,132 @@ public:
 
 // ----------------------------------------------------------------------------
 
+class VtkQuadricDecimationEffect : public VtkEffect {
+private:
+    const char *PARAM_TARGET_REDUCTION = "TargetReduction";
+    const char *PARAM_VOLUME_PRESERVATION = "PreserveTopology";
+
+public:
+    const char* GetName() override {
+        return "Decimate (quadric)";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(1e-6, 1 - 1e-6).Label("Target reduction");
+        AddParam(PARAM_VOLUME_PRESERVATION, false).Label("Preserve volume");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        double target_reduction = GetParam<double>(PARAM_TARGET_REDUCTION).GetValue();
+        bool volume_preservation = GetParam<bool>(PARAM_VOLUME_PRESERVATION).GetValue();
+
+        // vtkTriangleFilter to ensure triangle mesh on input
+        auto triangle_filter = vtkSmartPointer<vtkTriangleFilter>::New();
+        triangle_filter->SetInputData(input_polydata);
+
+        // vtkQuadricDecimation for main processing
+        auto decimate_filter = vtkSmartPointer<vtkQuadricDecimation>::New();
+        decimate_filter->SetInputConnection(triangle_filter->GetOutputPort());
+        decimate_filter->SetTargetReduction(target_reduction);
+        decimate_filter->SetVolumePreservation(volume_preservation);
+        // TODO the filter supports optimizing for attribute error, too, we could expose this
+
+        decimate_filter->Update();
+
+        auto filter_output = decimate_filter->GetOutput();
+        output_polydata->ShallowCopy(filter_output);
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
+// TODO replace vtkQuadricClustering with this once it lands post VTK 9.0
+//class VtkBinnedDecimationEffect : public VtkEffect {
+//private:
+//    const char *PARAM_NUMBER_OF_DIVISIONS = "NumberOfDivisions";
+//    const char *PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS = "AutoAdjustNumberOfDivisions";
+//    const char *PARAM_POINT_GENERATION_MODE = "PointGenerationMode";
+//
+//public:
+//    const char* GetName() override {
+//        return "Decimate (binned)";
+//    }
+//
+//    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+//        AddParam(PARAM_NUMBER_OF_DIVISIONS, std::array<int,3>{256, 256, 256})
+//            .Range({2, 2, 2}, {0xffff, 0xffff, 0xffff})
+//            .Label("Number of divisions");
+//        AddParam(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS, true).Label("Auto adjust number of divisions");
+//        AddParam(PARAM_POINT_GENERATION_MODE, 4).Label("Point generation mode (1-4)"); // TODO make this an enum
+//        return kOfxStatOK;
+//    }
+//
+//    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+//        auto number_of_divisions = GetParam<std::array<int,3>>(PARAM_NUMBER_OF_DIVISIONS).GetValue();
+//        bool auto_adjust_number_of_divisions = GetParam<bool>(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS).GetValue();
+//        bool point_generation_mode = GetParam<int>(PARAM_POINT_GENERATION_MODE).GetValue();
+//
+//        // TODO do we need this?
+//        // vtkTriangleFilter to ensure triangle mesh on input
+//        //auto triangle_filter = vtkSmartPointer<vtkTriangleFilter>::New();
+//        //triangle_filter->SetInputData(input_polydata);
+//
+//        // vtkBinnedDecimation for main processing
+//        auto decimate_filter = vtkSmartPointer<vtkBinnedDecimation>::New();
+//        decimate_filter->SetInputData(input_polydata);
+//        decimate_filter->SetNumberOfDivisions(number_of_divisions[0], number_of_divisions[1], number_of_divisions[2]);
+//        decimate_filter->SetAutoAdjustNumberOfDivisions(auto_adjust_number_of_divisions);
+//        decimate_filter->SetPointGenerationMode(point_generation_mode);
+//
+//        decimate_filter->Update();
+//
+//        auto filter_output = decimate_filter->GetOutput();
+//        output_polydata->ShallowCopy(filter_output);
+//        return kOfxStatOK;
+//    }
+//};
+
+// ----------------------------------------------------------------------------
+
+class VtkQuadricClusteringEffect : public VtkEffect {
+private:
+    const char *PARAM_NUMBER_OF_DIVISIONS = "NumberOfDivisions";
+    const char *PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS = "AutoAdjustNumberOfDivisions";
+
+public:
+    const char* GetName() override {
+        return "Decimate (quadratic clustering)";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_NUMBER_OF_DIVISIONS, std::array<int,3>{256, 256, 256})
+            .Range({2, 2, 2}, {0xffff, 0xffff, 0xffff})
+            .Label("Number of divisions");
+        AddParam(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS, true).Label("Auto adjust number of divisions");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        auto number_of_divisions = GetParam<std::array<int,3>>(PARAM_NUMBER_OF_DIVISIONS).GetValue();
+        bool auto_adjust_number_of_divisions = GetParam<bool>(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS).GetValue();
+
+        auto decimate_filter = vtkSmartPointer<vtkQuadricClustering>::New();
+        decimate_filter->SetInputData(input_polydata);
+        decimate_filter->SetNumberOfDivisions(number_of_divisions[0], number_of_divisions[1], number_of_divisions[2]);
+        decimate_filter->SetAutoAdjustNumberOfDivisions(auto_adjust_number_of_divisions);
+
+        decimate_filter->Update();
+
+        auto filter_output = decimate_filter->GetOutput();
+        output_polydata->ShallowCopy(filter_output);
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 class VtkFillHolesEffect : public VtkEffect {
 private:
     const char *PARAM_HOLE_SIZE = "HoleSize";
@@ -442,6 +580,8 @@ MfxRegister(
         VtkFeatureEdgesEffect,
         VtkFillHolesEffect,
         VtkTubeFilterEffect,
+        VtkQuadricDecimationEffect,
         VtkDecimateProEffect,
+        VtkQuadricClusteringEffect,
         VtkIdentityEffect
 );
