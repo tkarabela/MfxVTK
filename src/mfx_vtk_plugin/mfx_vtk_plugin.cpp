@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include <vtkQuadricDecimation.h>
 #include <vtkQuadricClustering.h>
 #include <vtkAppendPolyData.h>
+#include <vtkMaskPoints.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -226,6 +227,57 @@ public:
         append_poly_data->Update();
 
         auto filter_output = append_poly_data->GetOutput();
+        output_polydata->ShallowCopy(filter_output);
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
+class VtkMaskPointsEffect : public VtkEffect {
+private:
+    const char *PARAM_RANDOM_MODE = "RandomMode";
+    const char *PARAM_RANDOM_MODE_TYPE = "RandomModeType";
+    const char *PARAM_ON_RATIO = "OnRatio";
+    const char *PARAM_MAXIMUM_NUMBER_OF_POINTS = "MaximumNumberOfPoints";
+    // const char *PARAM_RANDOM_SEED = "RandomSeed";
+
+public:
+    const char* GetName() override {
+        return "Mask points";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_RANDOM_MODE, true).Label("Use point selection");
+        AddParam(PARAM_RANDOM_MODE_TYPE, 0).Range(0, 3).Label("Random distribution type"); // TODO replace this with enum
+        AddParam(PARAM_ON_RATIO, 2).Label("Take every n-th point");
+        AddParam(PARAM_MAXIMUM_NUMBER_OF_POINTS, 10000).Range(0, 10000000).Label("Maximum number of points");
+        // AddParam(PARAM_RANDOM_SEED, 1).Label("Random seed");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        auto use_random_mode = GetParam<bool>(PARAM_RANDOM_MODE).GetValue();
+        auto random_mode_type = GetParam<int>(PARAM_RANDOM_MODE_TYPE).GetValue();
+        auto on_ratio = GetParam<int>(PARAM_ON_RATIO).GetValue();
+        auto maximum_number_of_points = GetParam<int>(PARAM_MAXIMUM_NUMBER_OF_POINTS).GetValue();
+        // auto random_seed = GetParam<int>(PARAM_RANDOM_SEED).GetValue();
+
+        // FIXME until we have eunm, clamp the value manually
+        random_mode_type = std::max(0, std::min(3, random_mode_type));
+
+        auto mask_points_filter = vtkSmartPointer<vtkMaskPoints>::New();
+        mask_points_filter->SetInputData(input_polydata);
+
+        mask_points_filter->SetRandomMode(use_random_mode);
+        mask_points_filter->SetRandomModeType(random_mode_type);
+        mask_points_filter->SetOnRatio(on_ratio);
+        mask_points_filter->SetMaximumNumberOfPoints(maximum_number_of_points);
+        // mask_points_filter->SetRandomSeed(random_seed); // TODO does not exist?
+
+        mask_points_filter->Update();
+
+        auto filter_output = mask_points_filter->GetOutput();
         output_polydata->ShallowCopy(filter_output);
         return kOfxStatOK;
     }
@@ -598,6 +650,7 @@ MfxRegister(
         VtkSmoothPolyDataFilterEffect,
         VtkWindowedSincPolyDataFilterEffect,
         VtkPolyDataPointSamplerEffect,
+        VtkMaskPointsEffect,
         VtkFeatureEdgesEffect,
         VtkFillHolesEffect,
         VtkTubeFilterEffect,
