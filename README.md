@@ -36,14 +36,14 @@ In the [OpenMeshEffectForBlender branch of Blender][OpenMeshEffectForBlender]:
 ### How to build it yourself
 
 1. Build VTK (version >= 9.0), see [instructions on VTK wiki][BuildingVTK].
-   MfxVTK only needs `vtkCommon*`, `vtkFilter*`, `vtkIOXML` modules
-   (see [CMakeLists.txt](src/mfx_vtk_plugin/CMakeLists.txt)) - you don't
-   have to build Python/Qt/OpenGL related stuff.
+   - Use `BUILD_SHARED_LIBS=OFF` to make your MfxVTK binary not depend on VTK shared libraries.
+   - Turn off `VTK_GROUP_ENABLE_Rendering`, `VTK_GROUP_ENABLE_Web`, `VTK_GROUP_ENABLE_MPI`,
+     `VTK_GROUP_ENABLE_QT` to make compilation faster.
+   - (Optional) Use `VTK_SMP_IMPLEMENTATION_TYPE` other than `Sequential` for better performance of
+     some filters.
 2. Build MfxVTK using CMake, this should be straightforward. Be sure to point
    CMake to your VTK build directory, eg. `-DVTK_DIR:PATH=/path/to/VTK-9.0.1-build`.
 3. The plugin is in your build directory: `src/mfx_vtk_plugin/libmfx_vtk_plugin.ofx`.
-
-🚧 *TODO better explanation*
 
 ### How it works
 
