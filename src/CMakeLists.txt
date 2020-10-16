@@ -21,8 +21,6 @@
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-add_library(openmesheffect_openfx INTERFACE)
-target_include_directories(openmesheffect_openfx INTERFACE openfx)
-
-add_subdirectory(CppPluginSupport)
+add_subdirectory(OpenMeshEffect/examples)
+add_subdirectory(OpenMeshEffect/CppPluginSupport)
 add_subdirectory(mfx_vtk_plugin)
