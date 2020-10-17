@@ -365,11 +365,17 @@ public:
         bool capping = GetParam<bool>(PARAM_CAPPING).GetValue();
         // bool use_tube_bender = GetParam<bool>(PARAM_TUBE_BENDER).GetValue();
 
-        // vtkExtractEdges to create lines even from polygonal mesh
-        auto extract_edges_filter = vtkSmartPointer<vtkExtractEdges>::New();
-        extract_edges_filter->SetInputData(input_polydata);
+        auto append_poly_data = vtkSmartPointer<vtkAppendPolyData>::New();
 
-        auto tube_filter_input = extract_edges_filter->GetOutputPort();
+        if (input_polydata->GetNumberOfPolys() > 0) {
+            // vtkExtractEdges to create lines even from polygonal mesh
+            auto extract_edges_filter = vtkSmartPointer<vtkExtractEdges>::New();
+            extract_edges_filter->SetInputData(input_polydata);
+            extract_edges_filter->Update();
+            append_poly_data->AddInputData(extract_edges_filter->GetOutput());
+        } else {
+            append_poly_data->AddInputData(input_polydata);
+        }
 
         // TODO incorporate optional vtkTubeBender - when it lands post VTK 9.0
         // if (use_tube_bender) {

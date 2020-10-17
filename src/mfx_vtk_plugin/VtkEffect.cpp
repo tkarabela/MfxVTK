@@ -120,12 +120,15 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         vtk_input_lines->AllocateExact(inputProps.faceCount, inputProps.vertexCount);
     }
 
+    int loose_edge_count = 0;
+
     int vertex_idx = 0;
     for (int face_idx = 0; face_idx < inputProps.faceCount; face_idx++) {
         int vertcount = *((int*)(&faceLen.data[face_idx * faceLen.stride]));
         vtkCellArray *cell_arr = nullptr;
 
         if (vertcount == 2) {
+            loose_edge_count++;
             cell_arr = vtk_input_lines;
         } else if (vertcount >= 3) {
             cell_arr = vtk_input_polys;
@@ -142,6 +145,8 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
             }
         }
     }
+
+    printf("MFX input has %d loose edges\n", loose_edge_count);
 
     // TODO handle attributes
 
