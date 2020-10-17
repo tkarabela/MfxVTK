@@ -26,7 +26,8 @@ set(INC
 set(SRC
   mfx_vtk_plugin.cpp
   VtkEffect.cpp
-  VtkEffect.h)
+  VtkEffect.h
+  utils.h)
 
 set(LIB
   openmesheffect_openfx
@@ -46,6 +47,7 @@ find_package(VTK COMPONENTS
         vtkFiltersCore
         vtkFiltersSources
         vtkFiltersModeling
+        vtkFiltersGeometry
         vtkFiltersExtraction
         vtkIOXML
         QUIET)

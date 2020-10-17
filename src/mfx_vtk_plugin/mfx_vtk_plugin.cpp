@@ -21,7 +21,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+#include <vtkFloatArray.h>
+#include <vtkCellIterator.h>
+#include <vtkPointData.h>
 #include <vtkPolyData.h>
+#include <vtkMinimalStandardRandomSequence.h>
 #include <vtkSmartPointer.h>
 #include <vtkSmoothPolyDataFilter.h>
 #include <vtkWindowedSincPolyDataFilter.h>
@@ -37,12 +41,18 @@ THE SOFTWARE.
 #include <vtkQuadricClustering.h>
 #include <vtkAppendPolyData.h>
 #include <vtkMaskPoints.h>
+#include <vtkDelaunay3D.h>
+#include <vtkGeometryFilter.h>
+#include <vtkImplicitPolyDataDistance.h>
+#include <vtkStaticCellLinks.h>
+#include <vtkExtractCells.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
 #include "PluginSupport/MfxRegister"
 #include "VtkEffect.h"
+#include "utils.h"
 
 bool is_positive_double(double x) {
     return x >= DBL_EPSILON;
@@ -236,6 +246,125 @@ public:
 
 // ----------------------------------------------------------------------------
 
+class VtkVolumePointSamplerEffect : public VtkEffect {
+private:
+    const char *PARAM_NUMBER_OF_POINTS = "NumberOfPoints";
+    const char *PARAM_DISTRIBUTE_UNIFORMLY = "DistributeUniformly";
+    const char *PARAM_AUTO_SIMPLIFY = "AutoSimplify";
+
+public:
+    const char* GetName() override {
+        return "Volume sampling";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_NUMBER_OF_POINTS, 200).Range(1, 1e6).Label("Number of points");
+        AddParam(PARAM_DISTRIBUTE_UNIFORMLY, true).Label("Distribute points uniformly");
+        AddParam(PARAM_AUTO_SIMPLIFY, true).Label("Auto simplify input mesh");
+        // TODO more controls
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        auto number_of_points = GetParam<int>(PARAM_NUMBER_OF_POINTS).GetValue();
+        auto distribute_uniformly = GetParam<bool>(PARAM_DISTRIBUTE_UNIFORMLY).GetValue();
+        auto auto_simplify = GetParam<bool>(PARAM_AUTO_SIMPLIFY).GetValue();
+
+        return vtkCook_inner(input_polydata, output_polydata, number_of_points, distribute_uniformly, auto_simplify);
+    }
+
+    static OfxStatus vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,
+                                   int number_of_points, bool distribute_uniformly, bool auto_simplify,
+                                   bool _assume_input_polydata_triangles=false) {
+        double bounds[6];
+        input_polydata->GetBounds(bounds);
+
+        auto poly_data_distance = vtkSmartPointer<vtkImplicitPolyDataDistance>::New();
+
+        if (auto_simplify && input_polydata->GetNumberOfPolys() > 100) {
+            vtkSmartPointer<vtkPolyData> input_triangle_mesh = input_polydata;
+            if (!_assume_input_polydata_triangles) {
+                auto triangle_filter = vtkSmartPointer<vtkTriangleFilter>::New();
+                triangle_filter->SetInputData(input_polydata);
+                triangle_filter->Update();
+                input_triangle_mesh = triangle_filter->GetOutput();
+            }
+
+            auto input_polycount = input_triangle_mesh->GetNumberOfPolys();
+            int target_polycount = 1000 + static_cast<int>(std::sqrt(input_polycount));
+            double target_reduction = static_cast<double>(target_polycount) / input_polycount;
+
+            if (target_reduction < 1) {
+                auto quadratic_decimation_filter = vtkSmartPointer<vtkQuadricDecimation>::New();
+                quadratic_decimation_filter->SetInputData(input_triangle_mesh);
+                quadratic_decimation_filter->SetTargetReduction(target_reduction);
+                quadratic_decimation_filter->Update();
+                poly_data_distance->SetInput(quadratic_decimation_filter->GetOutput());
+            } else {
+                poly_data_distance->SetInput(input_polydata);
+            }
+        } else {
+            poly_data_distance->SetInput(input_polydata);
+        }
+
+        auto points = vtkSmartPointer<vtkPoints>::New();
+        points->SetNumberOfPoints(number_of_points);
+
+        output_polydata->SetPoints(points);
+
+        auto distance_arr = vtkSmartPointer<vtkFloatArray>::New();
+        distance_arr->SetName("distance");
+        distance_arr->SetNumberOfComponents(1);
+        distance_arr->SetNumberOfTuples(number_of_points);
+
+        output_polydata->GetPointData()->AddArray(distance_arr);
+
+        auto random_generator_vtk = vtkSmartPointer<vtkMinimalStandardRandomSequence>::New();
+        auto random_generator_custom = AdditiveRecurrence<3>();
+        auto get_random_uniform = [distribute_uniformly, &random_generator_vtk, &random_generator_custom](int i, double low, double high) -> double {
+            if (distribute_uniformly) {
+                random_generator_custom.Next();
+                return random_generator_custom.GetRangeValue(i, low, high);
+            } else {
+                random_generator_vtk->Next();
+                return random_generator_vtk->GetRangeValue(low, high);
+            };
+        };
+
+        int i, iteration_count;
+        for (i = 0, iteration_count = 0;
+             i < number_of_points && iteration_count < 10*number_of_points;
+             iteration_count++)
+        {
+            double x = get_random_uniform(0, bounds[0], bounds[1]),
+                   y = get_random_uniform(1, bounds[2], bounds[3]),
+                   z = get_random_uniform(2, bounds[4], bounds[5]);
+
+            double distance = poly_data_distance->EvaluateFunction(x, y, z);
+
+            // XXX what side?
+            if (distance < 0) {
+                points->SetPoint(i, x, y, z);
+                distance_arr->SetValue(i, distance);
+                i++;
+            }
+        }
+
+        if (i < number_of_points) {
+            printf("WARNING - gave up after %d iterations, but I only have %d points\n", iteration_count, i);
+            points->SetNumberOfPoints(i);
+            distance_arr->SetNumberOfTuples(i);
+        }
+
+        // TODO write error if input has no faces
+        // TODO use output distance array
+
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 class VtkMaskPointsEffect : public VtkEffect {
 private:
     const char *PARAM_RANDOM_MODE = "RandomMode";
@@ -338,6 +467,76 @@ public:
 
 // ----------------------------------------------------------------------------
 
+class VtkDelaunay3DEffect : public VtkEffect {
+private:
+    // const char *PARAM_ALPHA = "Alpha"; // doesn't work very well in my experience
+    const char *PARAM_EXTRACT_SURFACE = "ExtractSurface";
+    const char *PARAM_EXTRACT_WIREFRAME = "ExtractWireframe";
+    // const char *PARAM_ALPHA_TETS = "AlphaTets";
+    // const char *PARAM_ALPHA_TRIS = "AlphaTris";
+    // const char *PARAM_ALPHA_LINES = "AlphaLines";
+    // const char *PARAM_ALPHA_VERTS = "AlphaVerts";
+
+public:
+    const char* GetName() override {
+        return "Delaunay 3D";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        // AddParam(PARAM_ALPHA, 0.0).Range(0, 1e6).Label("Alpha distance");
+        AddParam(PARAM_EXTRACT_SURFACE, false).Label("Extract boundary faces (convex hull)");
+        AddParam(PARAM_EXTRACT_WIREFRAME, true).Label("Extract tetrahedral edges");
+        // AddParam(PARAM_ALPHA_TETS, true).Label("Extract tetrahedra for alpha > 0");
+        // AddParam(PARAM_ALPHA_TRIS, true).Label("Extract triangles for alpha > 0");
+        // AddParam(PARAM_ALPHA_LINES, true).Label("Extract lines for alpha > 0");
+        // AddParam(PARAM_ALPHA_VERTS, false).Label("Extract vertices for alpha > 0");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        // auto alpha = GetParam<double>(PARAM_ALPHA).GetValue();
+        auto extract_surface = GetParam<bool>(PARAM_EXTRACT_SURFACE).GetValue();
+        auto extract_wireframe = GetParam<bool>(PARAM_EXTRACT_WIREFRAME).GetValue();
+        // auto alpha_tets = GetParam<bool>(PARAM_ALPHA_TETS).GetValue();
+        // auto alpha_tris = GetParam<bool>(PARAM_ALPHA_TRIS).GetValue();
+        // auto alpha_lines = GetParam<bool>(PARAM_ALPHA_LINES).GetValue();
+        // auto alpha_verts = GetParam<bool>(PARAM_ALPHA_VERTS).GetValue();
+
+        auto delaunay3d_filter  = vtkSmartPointer<vtkDelaunay3D>::New();
+        delaunay3d_filter->SetInputData(input_polydata);
+        delaunay3d_filter->SetAlpha(0);
+        // delaunay3d_filter->SetAlpha(alpha);
+        // delaunay3d_filter->SetAlphaTets(alpha_tets);
+        // delaunay3d_filter->SetAlphaTris(alpha_tris);
+        // delaunay3d_filter->SetAlphaLines(alpha_lines);
+        // delaunay3d_filter->SetAlphaVerts(alpha_verts);
+
+        auto append_poly_data = vtkSmartPointer<vtkAppendPolyData>::New();
+
+        if (extract_surface) {
+            auto geometry_filter = vtkSmartPointer<vtkGeometryFilter>::New();
+            geometry_filter->SetInputConnection(delaunay3d_filter->GetOutputPort());
+            // geometry_filter->SetFastMode(true); // try this when it lands in VTK
+            geometry_filter->Update();
+            append_poly_data->AddInputData(geometry_filter->GetOutput());
+        }
+
+        if (extract_wireframe) {
+            auto extract_edges = vtkSmartPointer<vtkExtractEdges>::New();
+            extract_edges->SetInputConnection(delaunay3d_filter->GetOutputPort());
+            extract_edges->Update();
+            append_poly_data->AddInputData(extract_edges->GetOutput());
+        }
+
+        append_poly_data->Update();
+        auto filter_output = append_poly_data->GetOutput();
+        output_polydata->ShallowCopy(filter_output);
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 class VtkTubeFilterEffect : public VtkEffect {
 private:
     const char *PARAM_RADIUS = "Radius";
@@ -386,7 +585,7 @@ public:
 
         // vtkTubeFilter to turn lines into polygonal tubes
         auto tube_filter = vtkSmartPointer<vtkTubeFilter>::New();
-        tube_filter->SetInputConnection(tube_filter_input);
+        tube_filter->SetInputConnection(append_poly_data->GetOutputPort());
         tube_filter->SetRadius(radius);
         tube_filter->SetNumberOfSides(number_of_sides);
         tube_filter->SetCapping(capping);
@@ -684,6 +883,8 @@ MfxRegister(
         VtkPolyDataPointSamplerEffect,
         VtkMaskPointsEffect,
         VtkFeatureEdgesEffect,
+        VtkVolumePointSamplerEffect,
+        VtkDelaunay3DEffect,
         VtkFillHolesEffect,
         VtkTubeFilterEffect,
         VtkQuadricDecimationEffect,
