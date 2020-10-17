@@ -30,20 +30,39 @@ In the [OpenMeshEffectForBlender branch of Blender][OpenMeshEffectForBlender]:
 
 - select your mesh
 - open the **Modifier** tab and select **Open Mesh Effect** modifier
-- in modifier properties, set path to MfxVTK file (`mfx_vtk_plugin.ofx`)
-- select effect from the drop-down menu
+- in modifier properties, set path to MfxVTK plugin (`mfx_vtk_plugin.ofx` – download
+  [MfxVTK release] from GitHub or build it yourself)
+- select desired effect from the drop-down menu
 
 ### How to build it yourself
 
-1. Build VTK (version >= 9.0), see [instructions on VTK wiki][BuildingVTK].
-   - Use `BUILD_SHARED_LIBS=OFF` to make your MfxVTK binary not depend on VTK shared libraries.
-   - Turn off `VTK_GROUP_ENABLE_Rendering`, `VTK_GROUP_ENABLE_Web`, `VTK_GROUP_ENABLE_MPI`,
-     `VTK_GROUP_ENABLE_QT` to make compilation faster.
-   - (Optional) Use `VTK_SMP_IMPLEMENTATION_TYPE` other than `Sequential` for better performance of
-     some filters.
-2. Build MfxVTK using CMake, this should be straightforward. Be sure to point
-   CMake to your VTK build directory, eg. `-DVTK_DIR:PATH=/path/to/VTK-9.0.1-build`.
-3. The plugin is in your build directory: `src/mfx_vtk_plugin/libmfx_vtk_plugin.ofx`.
+You will need [Git], [CMake] and a C++ compiler toolchain (like Microsoft Visual Studio or GCC/Make).
+
+First, build VTK (version >= 9.0), see [instructions on VTK wiki][BuildingVTK].
+
+- Use `BUILD_SHARED_LIBS=OFF` to make your MfxVTK binary not depend on VTK shared libraries.
+- Turn off `VTK_GROUP_ENABLE_Rendering`, `VTK_GROUP_ENABLE_Web`, `VTK_GROUP_ENABLE_MPI`,
+ `VTK_GROUP_ENABLE_QT` to make compilation faster.
+- (Optional) Use `VTK_SMP_IMPLEMENTATION_TYPE` other than `Sequential` for better performance of
+ some filters.
+
+Then clone MfxVTK from GitHub (note that it has the OpenMeshEffect repository as a submodule):
+
+```sh
+git clone --recurse-submodules https://github.com/tkarabela/MfxVTK
+``` 
+
+Build MfxVTK using CMake:
+
+```sh
+cd MfxVTK
+mkdir cmake-build
+cd cmake-build
+cmake .. -DVTK_DIR:PATH=/path/to/VTK-9.0.1-build  # change this accordingly
+cmake --build . --config Debug
+```
+
+The plugin is now in your build directory: `src/mfx_vtk_plugin/libmfx_vtk_plugin.ofx`.
 
 ### How it works
 
@@ -83,6 +102,9 @@ see copyright notices in individual files.
 [VTK]: https://vtk.org
 [MfxVCG]: https://github.com/eliemichel/MfxVCG
 [BuildingVTK]: https://vtk.org/Wiki/VTK/Configure_and_Build
+[MfxVTK release]: https://github.com/tkarabela/MfxVTK/releases
+[CMake]: https://cmake.org
+[Git]: https://git-scm.com
 
 [vtkSmoothPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkSmoothPolyDataFilter.html
 [vtkWindowedSincPolyDataFilter]: https://vtk.org/doc/nightly/html/classvtkWindowedSincPolyDataFilter.html
