@@ -44,7 +44,9 @@ THE SOFTWARE.
 #include "PluginSupport/MfxRegister"
 #include "VtkEffect.h"
 
-// TODO implement kOfxMeshEffectActionIsIdentity for the effects
+bool is_positive_double(double x) {
+    return x >= DBL_EPSILON;
+}
 
 class VtkSmoothPolyDataFilterEffect : public VtkEffect {
 private:
@@ -417,7 +419,7 @@ public:
     }
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
-        AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(1e-6, 1 - 1e-6).Label("Target reduction");
+        AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(0, 1 - 1e-6).Label("Target reduction");
         AddParam(PARAM_PRESERVE_TOPOLOGY, false).Label("Preserve topology");
         AddParam(PARAM_FEATURE_ANGLE, 15.0).Range(0.001, 180.0).Label("Feature angle");
         AddParam(PARAM_SPLITTING, true).Label("Allow splitting");
@@ -428,6 +430,11 @@ public:
         AddParam(PARAM_INFLECTION_POINT_RATIO, 10.0).Range(1.001, 1e6).Label("Inflection point ratio");
         AddParam(PARAM_DEGREE, 25).Range(3, 1000).Label("Maximum degree of vertex");
         return kOfxStatOK;
+    }
+
+    bool vtkIsIdentity(OfxParamSetHandle parameters) override {
+        double target_reduction = GetParam<double>(PARAM_TARGET_REDUCTION).GetValue();
+        return not is_positive_double(target_reduction);
     }
 
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
@@ -481,9 +488,14 @@ public:
     }
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
-        AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(1e-6, 1 - 1e-6).Label("Target reduction");
+        AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(0, 1 - 1e-6).Label("Target reduction");
         AddParam(PARAM_VOLUME_PRESERVATION, false).Label("Preserve volume");
         return kOfxStatOK;
+    }
+
+    bool vtkIsIdentity(OfxParamSetHandle parameters) override {
+        double target_reduction = GetParam<double>(PARAM_TARGET_REDUCTION).GetValue();
+        return not is_positive_double(target_reduction);
     }
 
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
@@ -606,8 +618,14 @@ public:
     }
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
-        AddParam(PARAM_HOLE_SIZE, 1.0).Range(1e-6, 1e6).Label("Maximum hole size");
+        AddParam(PARAM_HOLE_SIZE, 1.0).Range(0, 1e6).Label("Maximum hole size");
         return kOfxStatOK;
+    }
+
+    bool vtkIsIdentity(OfxParamSetHandle parameters) override {
+        double hole_size = GetParam<double>(PARAM_HOLE_SIZE).GetValue();
+        printf("VtkFillHolesEffect::vtkIsIdentity() - hole_size=%g, is it less than %g?", hole_size, DBL_EPSILON);
+        return not is_positive_double(hole_size);
     }
 
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
@@ -630,12 +648,20 @@ public:
 
 class VtkIdentityEffect : public VtkEffect {
 public:
+    const char *PARAM_ACTION_IS_IDENTITY = "ActionIsIdentity";
+
     const char* GetName() override {
         return "Identity";
     }
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        AddParam(PARAM_ACTION_IS_IDENTITY, false).Label("kOfxMeshEffectActionIsIdentity");
         return kOfxStatOK;
+    }
+
+    bool vtkIsIdentity(OfxParamSetHandle parameters) override {
+        bool action_is_identity = GetParam<bool>(PARAM_ACTION_IS_IDENTITY).GetValue();
+        return action_is_identity;
     }
 
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
@@ -657,5 +683,7 @@ MfxRegister(
         VtkQuadricDecimationEffect,
         VtkDecimateProEffect,
         VtkQuadricClusteringEffect,
+
+        // these effects are interesting only for development of Open Mesh Effect
         VtkIdentityEffect
 );

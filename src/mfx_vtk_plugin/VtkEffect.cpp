@@ -354,3 +354,20 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     printf("==/ VtkEffect::Cook\n");
     return kOfxStatOK;
 }
+
+OfxStatus VtkEffect::IsIdentity(OfxMeshEffectHandle descriptor) {
+    OfxParamSetHandle parameters;
+    meshEffectSuite->getParamSet(descriptor, &parameters);
+
+    if (vtkIsIdentity(parameters)) {
+        printf("VtkEffect::IsIdentity - yes\n");
+        return kOfxStatOK;
+    } else {
+        printf("VtkEffect::IsIdentity - no\n");
+        return kOfxStatReplyDefault;
+    }
+}
+
+bool VtkEffect::vtkIsIdentity(OfxParamSetHandle parameters) {
+    return false;
+}
