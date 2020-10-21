@@ -430,7 +430,7 @@ public:
     }
 
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
-        AddParam(PARAM_FEATURE_ANGLE, 30).Range(1e-6, 180.0).Label("Feature angle");
+        AddParam(PARAM_FEATURE_ANGLE, 30.0).Range(0, 180.0).Label("Feature angle");
         AddParam(PARAM_FEATURE_EDGES, true).Label("Extract feature edges");
         AddParam(PARAM_BOUNDARY_EDGES, false).Label("Extract boundary edges");
         AddParam(PARAM_NONMANIFOLD_EDGES, false).Label("Extract non-manifold edges");
