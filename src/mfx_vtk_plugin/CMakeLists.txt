@@ -24,21 +24,15 @@ set(INC
 )
 
 set(SRC
-  mfx_vtk_plugin.cpp
   VtkEffect.cpp
   VtkEffect.h
-  utils.h)
+        mfx_vtk_utils.h
+  effects/VtkReduceEdgesEffect.cpp effects/VtkReduceEdgesEffect.h effects/VtkTetrahedralWireframeEffect.cpp effects/VtkTetrahedralWireframeEffect.h effects/VtkSamplePointsVolumeEffect.cpp effects/VtkSamplePointsVolumeEffect.h effects/VtkMakeTubesEffect.cpp effects/VtkMakeTubesEffect.h effects/VtkFillHolesEffect.cpp effects/VtkFillHolesEffect.h effects/VtkSamplePointsSurfaceEffect.cpp effects/VtkSamplePointsSurfaceEffect.h effects/VtkDecimateEffect.cpp effects/VtkDecimateEffect.h effects/VtkSmoothEffect.cpp effects/VtkSmoothEffect.h)
 
 set(LIB
   openmesheffect_openfx
   CppPluginSupport
 )
-
-add_library(mfx_vtk_plugin SHARED ${SRC})
-
-target_include_directories(mfx_vtk_plugin PRIVATE ${INC})
-target_link_libraries(mfx_vtk_plugin PRIVATE ${LIB})
-set_target_properties(mfx_vtk_plugin PROPERTIES SUFFIX ".ofx")
 
 # vtk
 find_package(VTK COMPONENTS
@@ -55,8 +49,18 @@ if (NOT VTK_FOUND)
     message("VTK not found: ${VTK_NOT_FOUND_MESSAGE}")
 endif()
 message (STATUS "VTK_VERSION: ${VTK_VERSION}")
-target_link_libraries(mfx_vtk_plugin PRIVATE ${VTK_LIBRARIES})
+
+add_library(mfx_vtk_plugin SHARED mfx_vtk_plugin.cpp ${SRC} effects/VtkExtractEdgesEffect.cpp effects/VtkExtractEdgesEffect.h)
+target_include_directories(mfx_vtk_plugin PRIVATE ${INC})
+target_link_libraries(mfx_vtk_plugin PRIVATE ${LIB} ${VTK_LIBRARIES})
+set_target_properties(mfx_vtk_plugin PROPERTIES SUFFIX ".ofx")
+
+add_library(mfx_vtk_plugin_extra SHARED mfx_vtk_plugin_extra.cpp ${SRC})
+target_include_directories(mfx_vtk_plugin_extra PRIVATE ${INC})
+target_link_libraries(mfx_vtk_plugin_extra PRIVATE ${LIB} ${VTK_LIBRARIES})
+set_target_properties(mfx_vtk_plugin_extra PROPERTIES SUFFIX ".ofx")
+
 vtk_module_autoinit(
-        TARGETS mfx_vtk_plugin
+        TARGETS mfx_vtk_plugin mfx_vtk_plugin_extra
         MODULES ${VTK_LIBRARIES}
 )

@@ -21,25 +21,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "PluginSupport/MfxRegister"
-#include "effects/VtkExtractEdgesEffect.h"
-#include "effects/VtkMakeTubesEffect.h"
-#include "effects/VtkReduceEdgesEffect.h"
-#include "effects/VtkSamplePointsSurfaceEffect.h"
-#include "effects/VtkSamplePointsVolumeEffect.h"
-#include "effects/VtkTetrahedralWireframeEffect.h"
-#include "effects/VtkDecimateEffect.h"
-#include "effects/VtkSmoothEffect.h"
-#include "effects/VtkFillHolesEffect.h"
+#pragma once
 
-MfxRegister(
-        VtkExtractEdgesEffect,
-        VtkMakeTubesEffect,
-        // VtkReduceEdgesEffect,
-        VtkSamplePointsSurfaceEffect,
-        VtkSamplePointsVolumeEffect,
-        VtkTetrahedralWireframeEffect,
-        VtkDecimateEffect,
-        VtkSmoothEffect,
-        VtkFillHolesEffect
-);
+#include "VtkEffect.h"
+
+class VtkExtractEdgesEffect : public VtkEffect {
+private:
+    const char *PARAM_FEATURE_ANGLE = "FeatureAngle";
+    const char *PARAM_FEATURE_EDGES = "FeatureEdges";
+    const char *PARAM_BOUNDARY_EDGES = "BoundaryEdges";
+    const char *PARAM_NONMANIFOLD_EDGES = "NonManifoldEdges";
+    const char *PARAM_MANIFOLD_EDGES = "ManifoldEdges";
+
+public:
+    const char* GetName() override;
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override;
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
+    static OfxStatus vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,
+                                   double feature_angle, bool extract_feature_edges, bool extract_boundary_edges,
+                                   bool extract_nonmanifold_edegs, bool extract_manifold_edges);
+};

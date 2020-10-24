@@ -2,7 +2,7 @@
 
 *An [Open Mesh Effect][OpenMeshEffect] plugin for [VTK][VTK] filters*
 
-![Smoothing Suzanne the monkey with VTK filters](doc/monkeys.png)
+![Smoothing Suzanne the monkey with VTK filters](docs/source/_static/monkeys.png)
 
 With this plugin, you can process 3D mesh data using filters
 from [Visualization Toolkit][VTK] (VTK) library in any software that supports
@@ -14,15 +14,10 @@ should come in the future.*
 
 ### Features
 
-Effect | VTK filter | Description
------------- | ------------- | -------------
-Smooth (Laplacian) | [`vtkSmoothPolyDataFilter`][vtkSmoothPolyDataFilter] | smooth vertices
-Smooth (windowed sinc) | [`vtkWindowedSincPolyDataFilter`][vtkWindowedSincPolyDataFilter] | smooth vertices (better detail preservation, doesn't shrink mesh)
-Point sampling | [`vtkPolyDataPointSampler`][vtkPolyDataPointSampler] | sample points from edges/faces at regular distance
-Feature edges | [`vtkFeatureEdges`][vtkFeatureEdges] | extract edges (boundary, feature, non-manifold)
-Fill holes | [`vtkFillHolesFilter`][vtkFillHolesFilter] | fill holes of defined size with triangle fans
-Tube filter | [`vtkTubeFilter`][vtkTubeFilter] | create polygonal wireframe from edges or faces
-Decimate (pro) | [`vtkDecimatePro`][vtkDecimatePro] | mesh decimator with many options (maximum error, preserve topology, ...)
+- Surface/volume point sampling
+- Creating tetrahedral wireframe from points
+- Smooth and Decimate effects
+- ...and more.
 
 ### How to use it
 

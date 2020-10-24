@@ -21,25 +21,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "PluginSupport/MfxRegister"
-#include "effects/VtkExtractEdgesEffect.h"
-#include "effects/VtkMakeTubesEffect.h"
-#include "effects/VtkReduceEdgesEffect.h"
-#include "effects/VtkSamplePointsSurfaceEffect.h"
-#include "effects/VtkSamplePointsVolumeEffect.h"
-#include "effects/VtkTetrahedralWireframeEffect.h"
-#include "effects/VtkDecimateEffect.h"
-#include "effects/VtkSmoothEffect.h"
-#include "effects/VtkFillHolesEffect.h"
+#pragma once
 
-MfxRegister(
-        VtkExtractEdgesEffect,
-        VtkMakeTubesEffect,
-        // VtkReduceEdgesEffect,
-        VtkSamplePointsSurfaceEffect,
-        VtkSamplePointsVolumeEffect,
-        VtkTetrahedralWireframeEffect,
-        VtkDecimateEffect,
-        VtkSmoothEffect,
-        VtkFillHolesEffect
-);
+#include "VtkEffect.h"
+
+class VtkTetrahedralWireframeEffect : public VtkEffect {
+private:
+    const char *PARAM_MAXIMUM_EDGE_LENGTH = "MaximumEdgeLength";
+
+public:
+    const char* GetName() override;
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override;
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
+    static OfxStatus vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,
+                                   double maximum_length);
+};
