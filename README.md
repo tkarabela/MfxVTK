@@ -4,10 +4,11 @@
 
 ![Smoothing Suzanne the monkey with VTK filters](docs/source/_static/monkeys.png)
 
-With this plugin, you can process 3D mesh data using filters
-from [Visualization Toolkit][VTK] (VTK) library in any software that supports
-the [Open Mesh Effect][OpenMeshEffect] standard. For example, they can be used
-as modifiers in the [OpenMeshEffectForBlender branch of Blender][OpenMeshEffectForBlender].
+MfxVTK is a plugin that brings filters from the [Visualization Toolkit][VTK] (VTK) library
+into any 3D software that supports the [Open Mesh Effect][OpenMeshEffect] standard.
+It provides a non-destructive workflow for polygonal meshes, wireframes and point clouds.
+
+To learn more, please have a look at [MfxVTK documentation][MfxVTKdocs].
 
 🚧 *Currently this is a proof-of-concept; it works, but more features and polish
 should come in the future.*
@@ -17,7 +18,7 @@ should come in the future.*
 - Surface/volume point sampling
 - Creating tetrahedral wireframe from points
 - Smooth and Decimate effects
-- ...and more.
+- ...and more, see [list of all effects][MfxVTKeffects].
 
 ### How to use it
 
@@ -95,6 +96,8 @@ see copyright notices in individual files.
 [OpenMeshEffect]: http://openmesheffect.org
 [OpenMeshEffectForBlender]: https://github.com/eliemichel/OpenMeshEffectForBlender
 [VTK]: https://vtk.org
+[MfxVTKdocs]: https://mfxvtk.readthedocs.io
+[MfxVTKeffects]: https://mfxvtk.readthedocs.io/en/latest/list-of-effects.html
 [MfxVCG]: https://github.com/eliemichel/MfxVCG
 [BuildingVTK]: https://vtk.org/Wiki/VTK/Configure_and_Build
 [MfxVTK release]: https://github.com/tkarabela/MfxVTK/releases
