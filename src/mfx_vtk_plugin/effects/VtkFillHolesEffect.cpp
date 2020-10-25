@@ -37,7 +37,7 @@ OfxStatus VtkFillHolesEffect::vtkDescribe(OfxParamSetHandle parameters) {
 
 bool VtkFillHolesEffect::vtkIsIdentity(OfxParamSetHandle parameters) {
     double hole_size = GetParam<double>(PARAM_HOLE_SIZE).GetValue();
-    return not is_positive_double(hole_size);
+    return !is_positive_double(hole_size);
 }
 
 OfxStatus VtkFillHolesEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {

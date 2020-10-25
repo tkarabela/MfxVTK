@@ -127,7 +127,7 @@ public:
 
     bool vtkIsIdentity(OfxParamSetHandle parameters) override {
         double target_reduction = GetParam<double>(PARAM_TARGET_REDUCTION).GetValue();
-        return not is_positive_double(target_reduction);
+        return !is_positive_double(target_reduction);
     }
 
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
