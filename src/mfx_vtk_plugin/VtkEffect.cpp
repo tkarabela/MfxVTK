@@ -75,6 +75,12 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     input.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
     input.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
 
+    int input_no_loose_edge = 1, input_constant_face_count = -1;
+
+
+    GetInput(kOfxMeshMainInput)
+
+
     printf("MFX input has %d points, %d vertices, %d faces\n",
            inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
 
