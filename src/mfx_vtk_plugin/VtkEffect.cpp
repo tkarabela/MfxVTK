@@ -75,12 +75,6 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     input.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
     input.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
 
-    int input_no_loose_edge = 1, input_constant_face_count = -1;
-
-
-    GetInput(kOfxMeshMainInput)
-
-
     printf("MFX input has %d points, %d vertices, %d faces\n",
            inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
 
@@ -126,11 +120,15 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         vtk_input_lines->AllocateExact(inputProps.faceCount, inputProps.vertexCount);
     }
 
+    // TODO take advantage of kOfxMeshPropNoLooseEdge, kOfxMeshPropConstantFaceCount
     int loose_edge_count = 0;
 
     int vertex_idx = 0;
     for (int face_idx = 0; face_idx < inputProps.faceCount; face_idx++) {
-        int vertcount = *((int*)(&faceLen.data[face_idx * faceLen.stride]));
+        int vertcount = (-1 == inputProps.constantFaceCount) ?
+                        (*(int*)(faceLen.data + face_idx*faceLen.stride)) :
+                        inputProps.constantFaceCount;
+
         vtkCellArray *cell_arr = nullptr;
 
         if (vertcount == 2) {
@@ -155,6 +153,8 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     printf("MFX input has %d loose edges\n", loose_edge_count);
 
     // TODO handle attributes
+
+    vtk_input_polydata->Print(std::cout);
 
     // ------------------------------------------------------------------------
     // Cook the vtkPolyData
@@ -206,6 +206,7 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     int output_point_count = 0;
     int output_vertex_count = 0;
     int output_face_count = 0;
+    int output_loose_edge_count = 0;
 
     if (vtk_output_points != nullptr) {
         output_point_count += vtk_output_points->GetNumberOfPoints();
@@ -215,13 +216,13 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         // no contribution to vertex or face count
     }
     if (vtk_output_lines != nullptr) {
-        int edge_count = (
+        output_loose_edge_count = (
                 vtk_output_lines->GetConnectivityArray()->GetNumberOfValues() - 1 // edge count if it was all one line
                 - vtk_output_lines->GetNumberOfCells() + 1 // subtract edges between distinct lines
                 );
 
-        output_vertex_count += 2*edge_count;
-        output_face_count += edge_count;
+        output_vertex_count += 2*output_loose_edge_count;
+        output_face_count += output_loose_edge_count;
     }
     if (vtk_output_polys != nullptr) {
         output_vertex_count += vtk_output_polys->GetNumberOfConnectivityIds();
@@ -229,8 +230,11 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     }
 
     // Allocate output MFX mesh
+    int output_no_loose_edge = (output_loose_edge_count > 0) ? 0 : 1;
+    int output_constant_face_count = -1;  // TODO take advantage of this
     MfxMesh output = GetInput(kOfxMeshMainOutput).GetMesh();
-    output.Allocate(output_point_count, output_vertex_count, output_face_count); // not a hint, this must be exact
+    output.Allocate(output_point_count, output_vertex_count, output_face_count,
+                    output_no_loose_edge, output_constant_face_count); // not a hint, this must be exact
 
     // Get output mesh data
     output.GetPointAttribute(kOfxMeshAttribPointPosition).FetchProperties(pointPos);
@@ -360,7 +364,7 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     int t_vtk_prologue = dt(t_cook_after_mfx_prologue, t_cook_after_vtk_prologue);
     int t_vtk_epilogue = dt(t_cook_after_vtk_cook, t_cook_after_vtk_epilogue);
 
-    printf("\n\tVtkEffect cooked in %d ms (+ %d ms = prologue/epilogue %d/%d ms VTK, %d/%d ms MFX)\n\n",
+    printf("\n\tVtkEffect cooked in %d ms (+ %d ms = %d/%d ms VTK, %d/%d ms MFX prologue/epilogue)\n\n",
            t_netto, t_brutto-t_netto, t_vtk_prologue, t_vtk_epilogue, t_mfx_prologue, t_mfx_epilogue);
     printf("==/ VtkEffect::Cook\n");
     return kOfxStatOK;
