@@ -64,3 +64,10 @@ vtk_module_autoinit(
         TARGETS mfx_vtk_plugin mfx_vtk_plugin_extra
         MODULES ${VTK_LIBRARIES}
 )
+
+# openmp
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(mfx_vtk_plugin PUBLIC OpenMP::OpenMP_CXX)
+    target_link_libraries(mfx_vtk_plugin_extra PUBLIC OpenMP::OpenMP_CXX)
+endif()
