@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "VtkEffectUtils.h"
 
 #include <chrono>
+#include <vtkXMLPolyDataWriter.h>
 
 OfxStatus VtkEffect::Describe(OfxMeshEffectHandle descriptor) {
     AddInput(kOfxMeshMainInput);
@@ -49,7 +50,17 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     auto vtk_output_polydata = vtkSmartPointer<vtkPolyData>::New();
     auto t_cook_after_vtk_prologue = std::chrono::system_clock::now();
 
+    // debug, save input mesh
+//    {
+//        // vtk_input_polydata->Print(std::cout);
+//        auto writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+//        writer->SetInputData(vtk_input_polydata);
+//        writer->SetFileName("/tmp/test-input.vtp");
+//        writer->Write();
+//    }
+
     // do the job, VTK side
+    auto t_cook_before_vtk_cook = std::chrono::system_clock::now();
     OfxStatus cook_status = vtkCook(vtk_input_polydata, vtk_output_polydata);
     auto t_cook_after_vtk_cook = std::chrono::system_clock::now();
 
@@ -58,14 +69,24 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         return cook_status;
     }
 
+    // debug, save output mesh
+//    {
+//        // vtk_output_polydata->Print(std::cout);
+//        auto writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+//        writer->SetInputData(vtk_output_polydata);
+//        writer->SetFileName("/tmp/test-output.vtp");
+//        writer->Write();
+//    }
+
     // prepare output, VTK side
+    auto t_cook_before_vtk_epilogue = std::chrono::system_clock::now();
     MfxMesh output_mesh = GetInput(kOfxMeshMainOutput).GetMesh();
     vtkpolydata_to_mfx_mesh(output_mesh, vtk_output_polydata);  // TODO handle attributes
     auto t_cook_after_vtk_epilogue = std::chrono::system_clock::now();
 
     // prepare output, OFX side
-    input_mesh.Release();
     output_mesh.Release();
+    input_mesh.Release();
     auto t_cook_after_mfx_epilogue = std::chrono::system_clock::now();
 
     // end
@@ -74,11 +95,11 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     };
 
     int t_brutto = dt(t_cook_start, t_cook_after_mfx_epilogue);
-    int t_netto = dt(t_cook_after_vtk_prologue, t_cook_after_vtk_cook);
+    int t_netto = dt(t_cook_before_vtk_cook, t_cook_after_vtk_cook);
     int t_mfx_prologue = dt(t_cook_start, t_cook_after_mfx_prologue);
     int t_mfx_epilogue = dt(t_cook_after_vtk_epilogue, t_cook_after_mfx_epilogue);
     int t_vtk_prologue = dt(t_cook_after_mfx_prologue, t_cook_after_vtk_prologue);
-    int t_vtk_epilogue = dt(t_cook_after_vtk_cook, t_cook_after_vtk_epilogue);
+    int t_vtk_epilogue = dt(t_cook_before_vtk_epilogue, t_cook_after_vtk_epilogue);
 
     printf("\n\tVtkEffect cooked in %d ms (+ %d ms = %d/%d ms VTK, %d/%d ms MFX prologue/epilogue)\n\n",
            t_netto, t_brutto-t_netto, t_vtk_prologue, t_vtk_epilogue, t_mfx_prologue, t_mfx_epilogue);

@@ -281,6 +281,53 @@ public:
 
 // ----------------------------------------------------------------------------
 
+class IdentityForwardAttributesEffect : public MfxEffect {
+public:
+    const char* GetName() override {
+        return "Identity (forward attributes)";
+    }
+
+    OfxStatus Describe(OfxMeshEffectHandle descriptor) override {
+        AddInput(kOfxMeshMainInput);
+        AddInput(kOfxMeshMainOutput);
+        return kOfxStatOK;
+    }
+
+    OfxStatus Cook(OfxMeshEffectHandle instance) override {
+        MfxMesh input_mesh = GetInput(kOfxMeshMainInput).GetMesh();
+        MfxMesh output_mesh = GetInput(kOfxMeshMainOutput).GetMesh();
+
+        MfxMeshProps input_mesh_properties, output_mesh_properties;
+        input_mesh.FetchProperties(input_mesh_properties);
+        output_mesh.FetchProperties(output_mesh_properties);
+
+        MfxAttribute input_pointPos = input_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
+        MfxAttribute input_vertPoint = input_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
+        MfxAttribute input_faceLen = input_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+
+        MfxAttribute output_pointPos = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
+        MfxAttribute output_vertPoint = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
+        MfxAttribute output_faceLen = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+
+        output_pointPos.ForwardFrom(input_pointPos);
+        output_vertPoint.ForwardFrom(input_vertPoint);
+        output_faceLen.ForwardFrom(input_faceLen);
+
+        output_mesh.Allocate(input_mesh_properties.pointCount,
+                             input_mesh_properties.vertexCount,
+                             input_mesh_properties.faceCount,
+                             input_mesh_properties.noLooseEdge,
+                             input_mesh_properties.constantFaceCount);
+
+        output_mesh.Release();
+        input_mesh.Release();
+
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 MfxRegister(
     // these are unsorted effects wrapped directly from VTK
     VtkMaskPointsEffect,
@@ -288,5 +335,6 @@ MfxRegister(
     VtkQuadricClusteringEffect,
 
     // these effects are interesting only for development of Open Mesh Effect
-    VtkIdentityEffect
+    VtkIdentityEffect,
+    IdentityForwardAttributesEffect
 );
