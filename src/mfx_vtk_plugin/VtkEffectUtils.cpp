@@ -25,6 +25,9 @@ THE SOFTWARE.
 
 #include <vtkXMLPolyDataWriter.h>
 #include <vtkCellArrayIterator.h>
+#include <vtkUnsignedCharArray.h>
+#include <vtkFloatArray.h>
+#include <vtkPointData.h>
 #include <cassert>
 #include <chrono>
 
@@ -210,6 +213,67 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
         offset_array[inputProps.faceCount] = vertex_sum; // sentinel value
     }
 
+    // copy UV and color attributes
+    // TODO switch this to more general approach when available; implement for other mesh types as well
+    // note we cannot forward here since we have per-vertex data from OFX but VTK only has per-point data
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "color%d", k);
+
+        try {
+            MfxAttributeProps attr;
+            input_mesh.GetVertexAttribute(name).FetchProperties(attr);
+            assert(attr.type == MfxAttributeType::UByte);
+
+            auto array = vtkSmartPointer<vtkUnsignedCharArray>::New();
+            array->SetNumberOfComponents(attr.componentCount);
+            array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
+            array->FillValue(0);
+            array->SetName(name);
+            vtk_input_polydata->GetPointData()->AddArray(array);
+
+            for (int i = 0; i < inputProps.vertexCount; i++) {
+                int p = *(int*)(vertPoint.data + i*vertPoint.stride);
+                char *values = attr.data + i*attr.stride;
+                for (int j = 0; j < attr.componentCount; j++) {
+                    array->SetTypedComponent(p, j, values[j]);
+                }
+            }
+            printf("MfxVTK - read array %s\n", name);
+        } catch (MfxSuiteException &e) {
+            continue;
+        }
+    }
+
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "uv%d", k);
+
+        try {
+            MfxAttributeProps attr;
+            input_mesh.GetVertexAttribute(name).FetchProperties(attr);
+            assert(attr.type == MfxAttributeType::Float);
+
+            auto array = vtkSmartPointer<vtkFloatArray>::New();
+            array->SetNumberOfComponents(attr.componentCount);
+            array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
+            array->FillValue(0);
+            array->SetName(name);
+            vtk_input_polydata->GetPointData()->AddArray(array);
+
+            for (int i = 0; i < inputProps.vertexCount; i++) {
+                int p = *(int*)(vertPoint.data + i*vertPoint.stride);
+                float *values = (float*)(attr.data + i*attr.stride);
+                for (int j = 0; j < attr.componentCount; j++) {
+                    array->SetTypedComponent(p, j, values[j]);
+                }
+            }
+            printf("MfxVTK - read array %s\n", name);
+        } catch (MfxSuiteException &e) {
+            continue;
+        }
+    }
+
     return vtk_input_polydata;
 }
 
@@ -339,6 +403,27 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         attrib_face_counts_props.data = nullptr;
     }
 
+    // handle vertex colors, UVs
+    // TODO do this more generally, for more mesh types
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "color%d", k);
+        auto array = vtk_output_polydata->GetPointData()->GetArray(name);
+        if (array != nullptr) {
+            printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
+            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeUByte);
+        }
+    }
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "uv%d", k);
+        auto array = vtk_output_polydata->GetPointData()->GetArray(name);
+        if (array != nullptr) {
+            printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
+            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeFloat);
+        }
+    }
+
     attrib_point_position.SetProperties(attrib_point_position_props);
     attrib_vertex_point.SetProperties(attrib_vertex_point_props);
     attrib_face_counts.SetProperties(attrib_face_counts_props);
@@ -359,6 +444,45 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         }
     }
     auto t5 = std::chrono::system_clock::now();
+
+    // handle vertex colors, UVs
+    // TODO do this more generally, for more mesh types
+    // note we cannot forward here since we have per-point data but OFX expects per-vertex data
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "color%d", k);
+        auto array = vtk_output_polydata->GetPointData()->GetArray(name);
+        if (array != nullptr) {
+            MfxAttributeProps attr;
+            output_mesh.GetVertexAttribute(name).FetchProperties(attr);
+
+            for (int i = 0; i < vertex_count; i++) {
+                int p = *(int*)(attrib_vertex_point_props.data + i*attrib_vertex_point_props.stride);
+                for (int j = 0; j < array->GetNumberOfComponents(); j++) {
+                    attr.data[i*attr.stride + j] = array->GetComponent(p, j); // TODO use GetTypedComponent here
+                }
+            }
+            printf("MfxVTK - wrote array %s\n", name);
+        }
+    }
+    for (int k = 0; k < 4; k++) {
+        char name[32];
+        sprintf(name, "uv%d", k);
+        auto array = vtk_output_polydata->GetPointData()->GetArray(name);
+        if (array != nullptr) {
+            MfxAttributeProps attr;
+            output_mesh.GetVertexAttribute(name).FetchProperties(attr);
+
+            for (int i = 0; i < vertex_count; i++) {
+                int p = *(int*)(attrib_vertex_point_props.data + i*attrib_vertex_point_props.stride);
+                float *dest = (float*)(attr.data + i*attr.stride);
+                for (int j = 0; j < array->GetNumberOfComponents(); j++) {
+                    dest[j] = array->GetComponent(p, j);
+                }
+            }
+            printf("MfxVTK - wrote array %s\n", name);
+        }
+    }
 
     auto dt = [](std::chrono::system_clock::time_point t1, std::chrono::system_clock::time_point t2) -> int {
         return std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();

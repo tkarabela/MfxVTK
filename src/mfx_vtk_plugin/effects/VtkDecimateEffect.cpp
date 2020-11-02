@@ -62,6 +62,10 @@ VtkDecimateEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *outpu
     decimate_filter->SetTargetReduction(target_reduction);
     decimate_filter->SetVolumePreservation(volume_preservation);
     // TODO the filter supports optimizing for attribute error, too, we could expose this
+    decimate_filter->AttributeErrorMetricOn();
+    //decimate_filter->ScalarsAttributeOn();
+    decimate_filter->TCoordsAttributeOn();
+    //decimate_filter->VectorsAttributeOn();
 
     decimate_filter->Update();
 
