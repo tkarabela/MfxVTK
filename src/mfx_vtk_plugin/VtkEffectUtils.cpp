@@ -220,7 +220,7 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
         char name[32];
         sprintf(name, "color%d", k);
 
-        try {
+        if (input_mesh.HasVertexAttribute(name)) {
             MfxAttributeProps attr;
             input_mesh.GetVertexAttribute(name).FetchProperties(attr);
             assert(attr.type == MfxAttributeType::UByte);
@@ -240,8 +240,6 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
                 }
             }
             printf("MfxVTK - read array %s\n", name);
-        } catch (MfxSuiteException &e) {
-            continue;
         }
     }
 
@@ -249,7 +247,7 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
         char name[32];
         sprintf(name, "uv%d", k);
 
-        try {
+        if (input_mesh.HasVertexAttribute(name)) {
             MfxAttributeProps attr;
             input_mesh.GetVertexAttribute(name).FetchProperties(attr);
             assert(attr.type == MfxAttributeType::Float);
@@ -269,8 +267,6 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
                 }
             }
             printf("MfxVTK - read array %s\n", name);
-        } catch (MfxSuiteException &e) {
-            continue;
         }
     }
 
