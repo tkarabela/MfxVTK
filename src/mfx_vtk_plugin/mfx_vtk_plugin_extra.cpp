@@ -23,7 +23,7 @@ THE SOFTWARE.
 
 #include <vtkCellIterator.h>
 #include <vtkPointData.h>
-#include <vtkStaticCellLocator.h>
+#include <vtkCellData.h>
 #include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
 #include <vtkFeatureEdges.h>
@@ -32,6 +32,12 @@ THE SOFTWARE.
 #include <vtkQuadricClustering.h>
 #include <vtkMaskPoints.h>
 #include <vtkStaticCellLinks.h>
+#include <vtkThreshold.h>
+#include <vtkGeometryFilter.h>
+#include <vtkIdFilter.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkModifiedBSPTree.h>
+#include <chrono>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -39,6 +45,229 @@ THE SOFTWARE.
 #include "PluginSupport/MfxRegister"
 #include "VtkEffect.h"
 #include "mfx_vtk_utils.h"
+
+// ----------------------------------------------------------------------------
+
+class VtkPokeEffect : public VtkEffect {
+private:
+    const char *PARAM_MAX_DISTANCE = "MaxDistance";
+    const char *PARAM_FALLOFF_RADIUS = "FalloffRadius";
+    const char *PARAM_FALLOFF_EXPONENT = "FalloffExponent";
+    const char *PARAM_OFFSET = "Offset";
+
+public:
+    const char* GetName() override {
+        return "Poke";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+        // TODO support collision with other mesh
+        // AddInput("Collider");
+
+        // TODO support specifying attribute for using main mesh as collider
+
+        AddParam(PARAM_MAX_DISTANCE, 0.0).Range(0.0, 1e6).Label("Maximum distance");
+        AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");
+        AddParam(PARAM_FALLOFF_EXPONENT, 2.0).Range(1e-2, 1e2).Label("Falloff exponent");
+        AddParam(PARAM_OFFSET, 0.0).Range(0.0, 1e6).Label("Offset");
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+        auto max_distance = GetParam<double>(PARAM_MAX_DISTANCE).GetValue();
+        auto falloff_radius = GetParam<double>(PARAM_FALLOFF_RADIUS).GetValue();
+        auto falloff_exponent = GetParam<double>(PARAM_FALLOFF_EXPONENT).GetValue();
+        auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
+
+        if (!input_polydata->GetPointData()->HasArray("color0")) {
+            printf("MfxVTK - VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
+            return kOfxStatErrValue;
+        }
+
+        // XXX NOTE TO USER - paint mesh white and collider black...
+
+
+        auto t0 = std::chrono::system_clock::now();
+
+        // remember point IDs so that we can map deformed mesh onto input_polydata
+        const char *point_id_array_name = "_PointId";
+        auto id_filter = vtkSmartPointer<vtkIdFilter>::New();
+        id_filter->SetInputData(input_polydata);
+        id_filter->SetPointIds(true);
+        id_filter->SetPointIdsArrayName(point_id_array_name);
+        id_filter->SetCellIds(false);
+
+        // get normals
+        // TODO read normals from input instead of recalculating (but make sure we have cell normals in collider)
+        auto normals_filter = vtkSmartPointer<vtkPolyDataNormals>::New();
+        normals_filter->SetInputConnection(id_filter->GetOutputPort());
+        normals_filter->SetSplitting(false);
+        normals_filter->SetNonManifoldTraversal(true);
+        normals_filter->SetComputePointNormals(true);
+        normals_filter->SetComputeCellNormals(true); // for collider
+        normals_filter->SetAutoOrientNormals(true);
+
+        // separate input into collider part and mesh part
+        auto threshold_filter = vtkSmartPointer<vtkThreshold>::New();
+        threshold_filter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "color0");
+        threshold_filter->ThresholdByUpper(0.5);
+        threshold_filter->SetInvert(true);
+        threshold_filter->SetInputConnection(normals_filter->GetOutputPort());
+
+        // vtkThreshold outputs unstructured grid, get vtkPolyData again
+        auto geometry_filter = vtkSmartPointer<vtkGeometryFilter>::New();
+        geometry_filter->SetInputConnection(threshold_filter->GetOutputPort());
+        geometry_filter->SetMerging(false);
+        geometry_filter->Update();
+
+        auto mesh_polydata = vtkSmartPointer<vtkPolyData>::New();
+        mesh_polydata->ShallowCopy(geometry_filter->GetOutput());
+
+        threshold_filter->SetInvert(false);
+        threshold_filter->Update();
+        geometry_filter->Update();
+        auto collider_polydata = vtkSmartPointer<vtkPolyData>::New();
+        collider_polydata->ShallowCopy(geometry_filter->GetOutput());
+
+        auto t1 = std::chrono::system_clock::now();
+
+        // do the deformation
+        // TODO crop mesh_polydata by collider bounding geometry, to reduce cost?
+        vtkCookInner(mesh_polydata, collider_polydata, max_distance, falloff_radius, falloff_exponent, offset);
+
+        auto t2 = std::chrono::system_clock::now();
+
+        // map deformation back onto main mesh
+        output_polydata->ShallowCopy(input_polydata);
+        output_polydata->GetPoints()->DeepCopy(input_polydata->GetPoints()); // maybe skip if we're okay changing input in place
+
+        auto mesh_id_array = mesh_polydata->GetPointData()->GetArray(point_id_array_name);
+        auto mesh_points = mesh_polydata->GetPoints();
+        auto output_points = output_polydata->GetPoints();
+        // TODO parallelize this
+        for (int pid_mesh = 0; pid_mesh < mesh_polydata->GetNumberOfPoints(); pid_mesh++) {
+            int pid_output = mesh_id_array->GetVariantValue(pid_mesh).ToInt();
+            double p[3];
+            mesh_points->GetPoint(pid_mesh, p);
+            output_points->SetPoint(pid_output, p);
+        }
+
+        auto t3 = std::chrono::system_clock::now();
+
+        auto dt = [](std::chrono::system_clock::time_point t1, std::chrono::system_clock::time_point t2) -> int {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+        };
+
+        printf("\n\tVtkPokeEffect timings [ms] dt1=%d, dt2=%d, dt3=%d\n",
+               dt(t0, t1), dt(t1, t2), dt(t2, t3));
+
+        return kOfxStatOK;
+    }
+
+    static void vtkCookInner(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata,
+                             double max_distance, double falloff_radius, double falloff_exponent, double offset) {
+        if (!is_positive_double(max_distance)) {
+            max_distance = mesh_polydata->GetLength(); // bounding box diagonal
+        }
+
+        auto mesh_normals = mesh_polydata->GetPointData()->GetArray("Normals");
+        auto collider_cell_normals = collider_polydata->GetCellData()->GetArray("Normals");
+
+        auto new_mesh_points = vtkSmartPointer<vtkPoints>::New();
+        new_mesh_points->DeepCopy(mesh_polydata->GetPoints()); // copy this so iterations do not affect each other
+
+        auto mesh_cell_locator = vtkSmartPointer<vtkModifiedBSPTree>::New();
+        mesh_cell_locator->SetDataSet(mesh_polydata);
+        mesh_cell_locator->Update();
+
+        auto collider_cell_locator = vtkSmartPointer<vtkModifiedBSPTree>::New();
+        collider_cell_locator->SetDataSet(collider_polydata);
+        collider_cell_locator->Update();
+
+        auto tmp_points_mesh = vtkSmartPointer<vtkPoints>::New();
+        auto tmp_points_collider = vtkSmartPointer<vtkPoints>::New();
+        auto tmp_cells_collider = vtkSmartPointer<vtkIdList>::New();
+
+        // bounding box of affected mesh area
+        double min_coord[3] = { DBL_MAX, DBL_MAX, DBL_MAX };
+        double max_coord[3] = { DBL_MIN, DBL_MIN, DBL_MIN };
+
+        // step 1 - clear mesh collision with collider
+        for (int i = 0; i < mesh_polydata->GetNumberOfPoints(); i++) {
+            double p[3];
+            double mesh_point[3], collider_point[3];
+            double mesh_normal[3], collider_cell_normal[3];
+            mesh_normals->GetTuple(i, mesh_normal);
+            mesh_polydata->GetPoint(i, p);
+
+            const double p0[3] =    { p[0] - 1e-6*mesh_normal[0],
+                                      p[1] - 1e-6*mesh_normal[1],
+                                      p[2] - 1e-6*mesh_normal[2] }; // probe line start, just under point
+            const double p_inf[3] = { p[0] - max_distance*mesh_normal[0],
+                                      p[1] - max_distance*mesh_normal[1],
+                                      p[2] - max_distance*mesh_normal[2] }; // probe line end, deep under point
+            const double tol = 1e-4; // ???
+
+            tmp_points_collider->Reset();
+            tmp_cells_collider->Reset();
+            collider_cell_locator->IntersectWithLine(p0, p_inf, tol, tmp_points_collider, tmp_cells_collider);
+            if (tmp_points_collider->GetNumberOfPoints() == 0) {
+                continue; // point does not have collider "behind" it
+            }
+            tmp_points_mesh->Reset();
+            mesh_cell_locator->IntersectWithLine(p0, p_inf, tol, tmp_points_mesh, nullptr);
+
+            tmp_points_collider->GetPoint(0, collider_point);
+            double this_to_collider_sq = vec3_squared_distance(p, collider_point);
+            double this_to_mesh_sq = DBL_MAX;
+            double mesh_to_collider_sq = DBL_MAX;
+            if (tmp_points_mesh->GetNumberOfPoints() > 0) {
+                tmp_points_mesh->GetPoint(0, mesh_point);
+                this_to_mesh_sq = vec3_squared_distance(p, mesh_point);
+
+                // mesh_to_collider_sq := distance from first mesh intersection to preceding collider intersection
+                for (int j = 0; j < tmp_points_collider->GetNumberOfPoints(); j++) {
+                    tmp_points_collider->GetPoint(j, collider_point);
+                    double tmp_collider_distance_sq = vec3_squared_distance(p, collider_point);
+                    if (tmp_collider_distance_sq > this_to_mesh_sq) break;
+                    mesh_to_collider_sq = std::abs(tmp_collider_distance_sq - this_to_mesh_sq);
+                }
+            }
+
+            // step 1, final breakdown
+            if (this_to_mesh_sq < this_to_collider_sq) {
+                // collider is outside this section of mesh
+                //printf("point %d - NO, collider outside\n", i);
+            } else if (this_to_collider_sq > mesh_to_collider_sq) {
+                // other side of mesh is closer to the collider
+                //printf("point %d - NO, other side closer to collider\n", i);
+            } else {
+                collider_cell_normals->GetTuple(tmp_cells_collider->GetId(0), collider_cell_normal);
+                double x = vec3_dot(mesh_normal, collider_cell_normal);
+                
+                if (x > 0) {
+                    // bad angle, collider and mesh point look the same way
+                    //printf("point %d - NO, bad angle %g\n", i, x);
+                } else {
+                    double distance = std::sqrt(this_to_collider_sq);
+                    double new_p[3] = { p[0] - mesh_normal[0]*distance,
+                                        p[1] - mesh_normal[1]*distance,
+                                        p[2] - mesh_normal[2]*distance };
+                    new_mesh_points->SetPoint(i, new_p);
+                    vec3_min(min_coord, p);
+                    vec3_max(max_coord, p);
+                    //printf("point %d - OK, moving by distance %g\n", i, distance);
+                }
+            }
+        }
+
+        // step 2 - handle falloff
+        // TODO falloff
+
+        // final step - overwrite original coordinates with new ones
+        mesh_polydata->GetPoints()->ShallowCopy(new_mesh_points);
+    }
+};
 
 // ----------------------------------------------------------------------------
 
@@ -329,6 +558,9 @@ public:
 // ----------------------------------------------------------------------------
 
 MfxRegister(
+    // effects in development
+    VtkPokeEffect,
+
     // these are unsorted effects wrapped directly from VTK
     VtkMaskPointsEffect,
     VtkDecimateProEffect,
