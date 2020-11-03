@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include <vtkPointData.h>
 #include <vtkCellData.h>
 #include <vtkPolyData.h>
+#include <vtkFloatArray.h>
 #include <vtkSmartPointer.h>
 #include <vtkFeatureEdges.h>
 #include <vtkTriangleFilter.h>
@@ -38,6 +39,7 @@ THE SOFTWARE.
 #include <vtkPolyDataNormals.h>
 #include <vtkModifiedBSPTree.h>
 #include <chrono>
+#include <vtkOctreePointLocator.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -85,6 +87,7 @@ public:
         }
 
         // XXX NOTE TO USER - paint mesh white and collider black...
+        // TODO we really want to support gray colors as well, to exclude boundary of collider and mesh
 
 
         auto t0 = std::chrono::system_clock::now();
@@ -176,6 +179,11 @@ public:
         auto new_mesh_points = vtkSmartPointer<vtkPoints>::New();
         new_mesh_points->DeepCopy(mesh_polydata->GetPoints()); // copy this so iterations do not affect each other
 
+        auto displacement_distance_array = vtkSmartPointer<vtkFloatArray>::New();
+        displacement_distance_array->SetNumberOfComponents(1);
+        displacement_distance_array->SetNumberOfTuples(mesh_polydata->GetNumberOfPoints());
+        displacement_distance_array->FillValue(0.0);
+
         auto mesh_cell_locator = vtkSmartPointer<vtkModifiedBSPTree>::New();
         mesh_cell_locator->SetDataSet(mesh_polydata);
         mesh_cell_locator->Update();
@@ -192,13 +200,31 @@ public:
         double min_coord[3] = { DBL_MAX, DBL_MAX, DBL_MAX };
         double max_coord[3] = { DBL_MIN, DBL_MIN, DBL_MIN };
 
+        double collider_bounds[6];
+        collider_polydata->GetBounds(collider_bounds);
+
+        double min_coord_estimate[3] = { collider_bounds[0] - max_distance,
+                                         collider_bounds[2] - max_distance,
+                                         collider_bounds[4] - max_distance };
+        double max_coord_estimate[3] = { collider_bounds[1] + max_distance,
+                                         collider_bounds[2] + max_distance,
+                                         collider_bounds[5] + max_distance };
+
         // step 1 - clear mesh collision with collider
         for (int i = 0; i < mesh_polydata->GetNumberOfPoints(); i++) {
             double p[3];
             double mesh_point[3], collider_point[3];
             double mesh_normal[3], collider_cell_normal[3];
-            mesh_normals->GetTuple(i, mesh_normal);
             mesh_polydata->GetPoint(i, p);
+
+            // early exit, mesh point too far away from collider
+            if (p[0] < min_coord_estimate[0] || p[0] > max_coord_estimate[0] ||
+                p[1] < min_coord_estimate[1] || p[1] > max_coord_estimate[1] ||
+                p[2] < min_coord_estimate[2] || p[2] > max_coord_estimate[2]) {
+                break;
+            }
+
+            mesh_normals->GetTuple(i, mesh_normal);
 
             const double p0[3] =    { p[0] - 1e-6*mesh_normal[0],
                                       p[1] - 1e-6*mesh_normal[1],
@@ -250,10 +276,13 @@ public:
                     //printf("point %d - NO, bad angle %g\n", i, x);
                 } else {
                     double distance = std::sqrt(this_to_collider_sq);
+                    /*
                     double new_p[3] = { p[0] - mesh_normal[0]*distance,
                                         p[1] - mesh_normal[1]*distance,
                                         p[2] - mesh_normal[2]*distance };
                     new_mesh_points->SetPoint(i, new_p);
+                    */
+                    displacement_distance_array->SetValue(i, distance);
                     vec3_min(min_coord, p);
                     vec3_max(max_coord, p);
                     //printf("point %d - OK, moving by distance %g\n", i, distance);
@@ -262,7 +291,58 @@ public:
         }
 
         // step 2 - handle falloff
-        // TODO falloff
+        auto mesh_falloff_locator = vtkSmartPointer<vtkOctreePointLocator>::New();
+        mesh_falloff_locator->SetDataSet(mesh_polydata);
+        mesh_falloff_locator->Update();
+
+        auto points_in_area_of_effect = vtkSmartPointer<vtkIdTypeArray>::New();
+        double area_param[6] = { min_coord[0] - falloff_radius, max_coord[0] + falloff_radius,
+                                 min_coord[1] - falloff_radius, max_coord[1] + falloff_radius,
+                                 min_coord[2] - falloff_radius, max_coord[2] + falloff_radius };
+
+        mesh_falloff_locator->FindPointsInArea(area_param, points_in_area_of_effect);
+        auto tmp_points_falloff = vtkSmartPointer<vtkIdList>::New();
+
+        const double falloff_radius_sq = falloff_radius*falloff_radius;
+
+        for (int _i = 0; _i < points_in_area_of_effect->GetNumberOfValues(); _i++) {
+            int i = points_in_area_of_effect->GetValue(_i);
+            double p0[3], mesh_normal[3];
+            mesh_polydata->GetPoint(i, p0);
+            mesh_normals->GetTuple(i, mesh_normal);
+
+            tmp_points_falloff->Reset();
+
+            mesh_falloff_locator->FindPointsWithinRadius(falloff_radius, p0, tmp_points_falloff);
+            int num_neighbors = tmp_points_falloff->GetNumberOfIds();
+            double weight_sum = 0.0;
+            double weighted_displacement_sum = 0.0;
+
+            // XXX we should really traverse the manifold instead of doing ball search like this
+            // XXX we should really average normals after deformation or sth instead of using previous normals
+            // XXX can this be parallel?
+            for (int _j = 0; _j < num_neighbors; _j++) {
+                int j = tmp_points_falloff->GetId(_j);
+                double p[3];
+                mesh_polydata->GetPoint(j, p);
+                double displacement = displacement_distance_array->GetValue(j);
+                double distance_sq = vec3_squared_distance(p, p0);
+                double radius_ratio = distance_sq / falloff_radius_sq;
+                double weight = std::pow(radius_ratio, falloff_exponent);
+
+                weight_sum += weight;
+                weighted_displacement_sum += /* weight * */ displacement; // XXX incorrect but looks better
+            }
+
+            double weighted_average_displacement_distance = weighted_displacement_sum / weight_sum;
+            double old_distance = displacement_distance_array->GetValue(i);
+            double new_distance = std::min(max_distance, std::max(old_distance, weighted_average_displacement_distance));
+
+            double new_p[3] = { p0[0] - mesh_normal[0]*new_distance,
+                                p0[1] - mesh_normal[1]*new_distance,
+                                p0[2] - mesh_normal[2]*new_distance };
+            new_mesh_points->SetPoint(i, new_p);
+        }
 
         // final step - overwrite original coordinates with new ones
         mesh_polydata->GetPoints()->ShallowCopy(new_mesh_points);
