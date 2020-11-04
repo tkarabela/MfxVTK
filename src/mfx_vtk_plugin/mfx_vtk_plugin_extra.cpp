@@ -56,6 +56,7 @@ private:
     const char *PARAM_FALLOFF_RADIUS = "FalloffRadius";
     const char *PARAM_FALLOFF_EXPONENT = "FalloffExponent";
     const char *PARAM_OFFSET = "Offset";
+    const char *PARAM_DEBUG = "Debug";
 
 public:
     const char* GetName() override {
@@ -72,6 +73,7 @@ public:
         AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");
         AddParam(PARAM_FALLOFF_EXPONENT, 2.0).Range(1e-2, 1e2).Label("Falloff exponent");
         AddParam(PARAM_OFFSET, 0.0).Range(0.0, 1e6).Label("Offset");
+        AddParam(PARAM_DEBUG, false).Label("Debug");
         return kOfxStatOK;
     }
 
@@ -80,6 +82,7 @@ public:
         auto falloff_radius = GetParam<double>(PARAM_FALLOFF_RADIUS).GetValue();
         auto falloff_exponent = GetParam<double>(PARAM_FALLOFF_EXPONENT).GetValue();
         auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
+        auto debug = GetParam<bool>(PARAM_DEBUG).GetValue();
 
         if (!input_polydata->GetPointData()->HasArray("color0")) {
             printf("MfxVTK - VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
@@ -87,9 +90,14 @@ public:
         }
 
         // XXX NOTE TO USER - paint mesh white and collider black...
-        // TODO we really want to support gray colors as well, to exclude boundary of collider and mesh
 
+        vtkCookInner(input_polydata, output_polydata, max_distance, falloff_radius, falloff_exponent, offset, debug);
 
+        return kOfxStatOK;
+    }
+
+    static void vtkCookInner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,
+                             double max_distance, double falloff_radius, double falloff_exponent, double offset, bool debug) {
         auto t0 = std::chrono::system_clock::now();
 
         // remember point IDs so that we can map deformed mesh onto input_polydata
@@ -113,8 +121,7 @@ public:
         // separate input into collider part and mesh part
         auto threshold_filter = vtkSmartPointer<vtkThreshold>::New();
         threshold_filter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "color0");
-        threshold_filter->ThresholdByUpper(0.5);
-        threshold_filter->SetInvert(true);
+        threshold_filter->ThresholdBetween(255, 255);
         threshold_filter->SetInputConnection(normals_filter->GetOutputPort());
 
         // vtkThreshold outputs unstructured grid, get vtkPolyData again
@@ -126,7 +133,7 @@ public:
         auto mesh_polydata = vtkSmartPointer<vtkPolyData>::New();
         mesh_polydata->ShallowCopy(geometry_filter->GetOutput());
 
-        threshold_filter->SetInvert(false);
+        threshold_filter->ThresholdBetween(0, 0);
         threshold_filter->Update();
         geometry_filter->Update();
         auto collider_polydata = vtkSmartPointer<vtkPolyData>::New();
@@ -135,8 +142,10 @@ public:
         auto t1 = std::chrono::system_clock::now();
 
         // do the deformation
+        printf("\n\ttotal elements: %d  collider: %d   mesh: %d\n", input_polydata->GetNumberOfCells(), collider_polydata->GetNumberOfCells(), mesh_polydata->GetNumberOfCells());
+
         // TODO crop mesh_polydata by collider bounding geometry, to reduce cost?
-        vtkCookInner(mesh_polydata, collider_polydata, max_distance, falloff_radius, falloff_exponent, offset);
+        vtkCookInner2(mesh_polydata, collider_polydata, max_distance, falloff_radius, falloff_exponent, offset, debug);
 
         auto t2 = std::chrono::system_clock::now();
 
@@ -163,12 +172,10 @@ public:
 
         printf("\n\tVtkPokeEffect timings [ms] dt1=%d, dt2=%d, dt3=%d\n",
                dt(t0, t1), dt(t1, t2), dt(t2, t3));
-
-        return kOfxStatOK;
     }
 
-    static void vtkCookInner(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata,
-                             double max_distance, double falloff_radius, double falloff_exponent, double offset) {
+    static void vtkCookInner2(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata,
+                             double max_distance, double falloff_radius, double falloff_exponent, double offset, bool debug) {
         if (!is_positive_double(max_distance)) {
             max_distance = mesh_polydata->GetLength(); // bounding box diagonal
         }
@@ -336,7 +343,13 @@ public:
 
             double weighted_average_displacement_distance = weighted_displacement_sum / weight_sum;
             double old_distance = displacement_distance_array->GetValue(i);
-            double new_distance = std::min(max_distance, std::max(old_distance, weighted_average_displacement_distance));
+            double new_distance;
+
+            if (debug) {
+                new_distance = old_distance;
+            } else {
+                new_distance = std::min(max_distance, std::max(old_distance, weighted_average_displacement_distance));
+            }
 
             double new_p[3] = { p0[0] - mesh_normal[0]*new_distance,
                                 p0[1] - mesh_normal[1]*new_distance,
