@@ -23,17 +23,19 @@ THE SOFTWARE.
 
 #include "VtkPokeEffect.h"
 #include "mfx_vtk_utils.h"
+#include "VtkSurfaceDistanceEffect.h"
 #include <chrono>
 #include <vtkPointData.h>
 #include <vtkCellData.h>
 #include <vtkIdFilter.h>
-#include <vtkIdTypeArray.h>
 #include <vtkFloatArray.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkThreshold.h>
 #include <vtkGeometryFilter.h>
 #include <vtkModifiedBSPTree.h>
 #include <vtkOctreePointLocator.h>
+#include <vtkStaticCellLinks.h>
+#include <vtkWarpVector.h>
 
 const char *VtkPokeEffect::GetName() {
     return "Poke";
@@ -48,8 +50,9 @@ OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters) {
     AddParam(PARAM_MAX_DISTANCE, 0.0).Range(0.0, 1e6).Label("Maximum distance");
     AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");
     AddParam(PARAM_FALLOFF_EXPONENT, 2.0).Range(1e-2, 1e2).Label("Falloff exponent");
+    AddParam(PARAM_COLLISION_SMOOTHING_RATIO, 0.001).Range(0.0, 1.0).Label("Collision smoothing ratio");
+    AddParam(PARAM_NUMBER_OF_ITERATIONS, 20).Range(1, 10000).Label("Number of iterations");
     AddParam(PARAM_OFFSET, 0.0).Range(0.0, 1e6).Label("Offset");
-    AddParam(PARAM_DEBUG, false).Label("Debug");
     return kOfxStatOK;
 }
 
@@ -57,8 +60,9 @@ OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *outpu
     auto max_distance = GetParam<double>(PARAM_MAX_DISTANCE).GetValue();
     auto falloff_radius = GetParam<double>(PARAM_FALLOFF_RADIUS).GetValue();
     auto falloff_exponent = GetParam<double>(PARAM_FALLOFF_EXPONENT).GetValue();
+    auto collision_smoothing_ratio = GetParam<double>(PARAM_COLLISION_SMOOTHING_RATIO).GetValue();
+    auto number_of_iterations = GetParam<int>(PARAM_NUMBER_OF_ITERATIONS).GetValue();
     auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
-    auto debug = GetParam<bool>(PARAM_DEBUG).GetValue();
 
     if (!input_polydata->GetPointData()->HasArray("color0")) {
         printf("VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
@@ -67,13 +71,15 @@ OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *outpu
 
     // XXX NOTE TO USER - paint mesh white and collider black...
 
-    vtkCook_inner(input_polydata, output_polydata, max_distance, falloff_radius, falloff_exponent, offset, debug);
+    vtkCook_inner(input_polydata, output_polydata, max_distance, falloff_radius, falloff_exponent,
+                  collision_smoothing_ratio, offset, number_of_iterations);
 
     return kOfxStatOK;
 }
 
 OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance,
-                                       double falloff_radius, double falloff_exponent, double offset, bool debug) {
+                                       double falloff_radius, double falloff_exponent, double collision_smoothing_ratio,
+                                       double offset, int number_of_iterations) {
     auto t0 = std::chrono::system_clock::now();
 
     // remember point IDs so that we can map deformed mesh onto input_polydata
@@ -128,7 +134,7 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
 
     auto contacts = evaluate_collision(mesh_polydata, collider_polydata, max_distance, offset);
     auto t2 = std::chrono::system_clock::now();
-    handle_reaction_simple(mesh_polydata, falloff_radius, falloff_exponent, contacts, debug, max_distance);
+    handle_reaction_laplacian(mesh_polydata, contacts, falloff_radius, falloff_exponent, number_of_iterations, collision_smoothing_ratio);
     auto t3 = std::chrono::system_clock::now();
 
 
@@ -164,11 +170,13 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
                                   double offset) {
     std::vector<Contact> contacts;
 
-    // FIXME max_distance has some trouble when its not set to large value
-
     if (offset > 0) {
-        // TODO handle offset
-        printf("VtkPokeEffect - warning, nonzero offset not handled yet\n");
+        auto warp_filter = vtkSmartPointer<vtkWarpVector>::New();
+        warp_filter->SetInputData(collider_polydata);
+        warp_filter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "Normals");
+        warp_filter->SetScaleFactor(offset);
+        warp_filter->Update();
+        collider_polydata->SetPoints(warp_filter->GetOutput()->GetPoints());
     }
 
     auto mesh_normals = mesh_polydata->GetPointData()->GetArray("Normals");
@@ -210,7 +218,7 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
         if (p[0] < min_coord_estimate[0] || p[0] > max_coord_estimate[0] ||
             p[1] < min_coord_estimate[1] || p[1] > max_coord_estimate[1] ||
             p[2] < min_coord_estimate[2] || p[2] > max_coord_estimate[2]) {
-            break;
+            continue;
         }
 
         mesh_normals->GetTuple(i, mesh_normal);
@@ -277,90 +285,126 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
     return contacts;
 }
 
-void VtkPokeEffect::handle_reaction_simple(vtkPolyData *mesh_polydata, double falloff_radius, double falloff_exponent,
-                                           const std::vector<Contact> &contacts, bool debug, double max_distance) {
+void VtkPokeEffect::handle_reaction_laplacian(vtkPolyData *mesh_polydata, const std::vector<Contact> &contacts,
+                                              double falloff_radius, double falloff_exponent,
+                                              int number_of_iterations, double collision_smoothing_ratio) {
     auto mesh_normals = mesh_polydata->GetPointData()->GetArray("Normals");
 
+    // apply initial deformation
     auto new_mesh_points = vtkSmartPointer<vtkPoints>::New();
-    new_mesh_points->DeepCopy(mesh_polydata->GetPoints()); // copy this so iterations do not affect each other
+    new_mesh_points->DeepCopy(mesh_polydata->GetPoints());
 
-    auto mesh_falloff_locator = vtkSmartPointer<vtkOctreePointLocator>::New();
-    mesh_falloff_locator->SetDataSet(mesh_polydata);
-    mesh_falloff_locator->Update();
-
-    auto displacement_distance_array = vtkSmartPointer<vtkFloatArray>::New();
-    displacement_distance_array->SetNumberOfComponents(1);
-    displacement_distance_array->SetNumberOfTuples(mesh_polydata->GetNumberOfPoints());
-    displacement_distance_array->FillValue(0.0);
-
-    double min_coord[3] = { DBL_MAX, DBL_MAX, DBL_MAX };
-    double max_coord[3] = { DBL_MIN, DBL_MIN, DBL_MIN };
-
+    std::vector<int> collision_points;
     for (auto c : contacts) {
-        float d = std::sqrt(c.dx*c.dx + c.dy*c.dy + c.dz*c.dz);
-        displacement_distance_array->SetValue(c.pid, d);
+        collision_points.push_back(c.pid);
 
         double p[3];
-        mesh_polydata->GetPoint(c.pid, p);
-        for (int i = 0; i < 3; i++) {
-            min_coord[i] = std::min(min_coord[i], p[i]);
-            max_coord[i] = std::max(max_coord[i], p[i]);
-        }
+        new_mesh_points->GetPoint(c.pid, p);
+        p[0] += c.dx;
+        p[1] += c.dy;
+        p[2] += c.dz;
+        new_mesh_points->SetPoint(c.pid, p);
     }
 
-    auto points_in_area_of_effect = vtkSmartPointer<vtkIdTypeArray>::New();
-    double area_param[6] = { min_coord[0] - falloff_radius, max_coord[0] + falloff_radius,
-                             min_coord[1] - falloff_radius, max_coord[1] + falloff_radius,
-                             min_coord[2] - falloff_radius, max_coord[2] + falloff_radius };
+    auto cell_links = vtkSmartPointer<vtkStaticCellLinks>::New(); // TODO use templated class to get int32 here
+    cell_links->BuildLinks(mesh_polydata);
 
-    mesh_falloff_locator->FindPointsInArea(area_param, points_in_area_of_effect);
-    auto tmp_points_falloff = vtkSmartPointer<vtkIdList>::New();
+    auto manifold_distance_arr = VtkSurfaceDistanceEffect::compute_distance(mesh_polydata, collision_points.size(),
+                                                                            collision_points.data(), cell_links,
+                                                                            (float) falloff_radius);
 
-    const double falloff_radius_sq = falloff_radius*falloff_radius;
+    auto tmp_id_list = vtkSmartPointer<vtkIdList>::New(); // TODO get rid of this, prevents parallelization
+    auto push_point_neighbors = [&mesh_polydata, &cell_links, &tmp_id_list](int u, std::vector<int> &connectivity) -> int {
+        tmp_id_list->Reset();
+        int num_cells = cell_links->GetNumberOfCells(u);
+        auto neighbor_cells = cell_links->GetCells(u);
+        for (int i = 0; i < num_cells; i++) {
+            auto cell = mesh_polydata->GetCell(neighbor_cells[i]);
+            int num_points = cell->GetNumberOfPoints();
 
-    for (int _i = 0; _i < points_in_area_of_effect->GetNumberOfValues(); _i++) {
-        int i = points_in_area_of_effect->GetValue(_i);
-        double p0[3], mesh_normal[3];
-        mesh_polydata->GetPoint(i, p0);
-        mesh_normals->GetTuple(i, mesh_normal);
-
-        tmp_points_falloff->Reset();
-
-        mesh_falloff_locator->FindPointsWithinRadius(falloff_radius, p0, tmp_points_falloff);
-        int num_neighbors = tmp_points_falloff->GetNumberOfIds();
-        double weight_sum = 0.0;
-        double weighted_displacement_sum = 0.0;
-
-        // XXX we should really traverse the manifold instead of doing ball search like this
-        // XXX we should really average normals after deformation or sth instead of using previous normals
-        // XXX can this be parallel?
-        for (int _j = 0; _j < num_neighbors; _j++) {
-            int j = tmp_points_falloff->GetId(_j);
-            double p[3];
-            mesh_polydata->GetPoint(j, p);
-            double displacement = displacement_distance_array->GetValue(j);
-            double distance_sq = vec3_squared_distance(p, p0);
-            double radius_ratio = distance_sq / falloff_radius_sq;
-            double weight = std::pow(radius_ratio, falloff_exponent);
-
-            weight_sum += weight;
-            weighted_displacement_sum += /* weight * */ displacement; // XXX incorrect but looks better
+            for (int j = 0; j < num_points; j++) {
+                int v = cell->GetPointId(j);
+                tmp_id_list->InsertUniqueId(v);
+            }
         }
 
-        double weighted_average_displacement_distance = weighted_displacement_sum / weight_sum;
-        double old_distance = displacement_distance_array->GetValue(i);
-        double new_distance;
-
-        if (debug) {
-            new_distance = old_distance;
-        } else {
-            new_distance = std::min(max_distance, std::max(old_distance, weighted_average_displacement_distance));
+        for (int i = 0; i < tmp_id_list->GetNumberOfIds(); i++) {
+            connectivity.push_back(tmp_id_list->GetId(i));
         }
+        return tmp_id_list->GetNumberOfIds();
+    };
 
-        double new_p[3] = { p0[0] - mesh_normal[0]*new_distance,
-                            p0[1] - mesh_normal[1]*new_distance,
-                            p0[2] - mesh_normal[2]*new_distance };
-        new_mesh_points->SetPoint(i, new_p);
+    // pick points to be affected by the laplacian
+    std::vector<int> smoothed_points;
+    std::vector<int> smoothed_points_offsets;
+    std::vector<int> smoothed_points_connectivity;
+    int previous_offset = 0;
+    for (int i = 0; i < manifold_distance_arr->GetNumberOfValues(); i++) {
+        float d = manifold_distance_arr->GetValue(i);
+
+        // smooth points in falloff_radius
+        // if collision_smoothing_ratio > 0, we want to smooth collision points as well
+        if (d < falloff_radius && (d > 0 || collision_smoothing_ratio > 0)) {
+            smoothed_points.push_back(i);
+            smoothed_points_offsets.push_back(previous_offset);
+            int neighbor_count = push_point_neighbors(i, smoothed_points_connectivity);
+            previous_offset += neighbor_count;
+        }
+    }
+    smoothed_points_offsets.push_back(previous_offset);
+    printf("VtkPokeEffect - picked %d points for smoothing\n", smoothed_points.size());
+
+    // iterate laplacian
+    for (int i = 0; i < number_of_iterations; i++) {
+        // TODO parallelize
+        // XXX make iterations independent!!!
+        for (int j = 0; j < smoothed_points.size(); j++) {
+            int pid0 = smoothed_points[j];
+            double p0[3];
+            new_mesh_points->GetPoint(pid0, p0);
+            double barycenter[3] = {0, 0, 0};
+            int num_neighbors = smoothed_points_offsets[j+1] - smoothed_points_offsets[j];
+
+            for (int k = smoothed_points_offsets[j]; k < smoothed_points_offsets[j+1]; k++) {
+                int pid = smoothed_points_connectivity[k];
+                double p[3];
+                new_mesh_points->GetPoint(pid, p);
+                barycenter[0] += p[0];
+                barycenter[1] += p[1];
+                barycenter[2] += p[2];
+            }
+            barycenter[0] /= num_neighbors;
+            barycenter[1] /= num_neighbors;
+            barycenter[2] /= num_neighbors;
+
+            float distance_to_collision = manifold_distance_arr->GetValue(pid0);
+            double alpha = 0.0;  // blending weight
+
+            double disp[3] = { barycenter[0] - p0[0],
+                               barycenter[1] - p0[1],
+                               barycenter[2] - p0[2] };
+
+            if (distance_to_collision > 0) {
+                alpha = std::pow(std::max(0.0, 1.0 - (distance_to_collision / falloff_radius)), falloff_exponent);
+            } else {
+                // collision point
+                double normal[3];
+                mesh_normals->GetTuple(pid0, normal);
+                if (vec3_dot(disp, normal) > 0) {
+                    // pushing outside - back towards collider, we want to dampen this
+                    alpha = collision_smoothing_ratio;
+                } else {
+                    // pushing inside mesh, use full laplacian
+                    alpha = 1.0;
+                }
+            }
+
+            p0[0] += alpha * disp[0];
+            p0[1] += alpha * disp[1];
+            p0[2] += alpha * disp[2];
+
+            new_mesh_points->SetPoint(pid0, p0);
+        }
     }
 
     // final step - overwrite original coordinates with new ones
