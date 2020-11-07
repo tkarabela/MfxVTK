@@ -21,27 +21,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "PluginSupport/MfxRegister"
-#include "effects/VtkExtractEdgesEffect.h"
-#include "effects/VtkMakeTubesEffect.h"
-#include "effects/VtkReduceEdgesEffect.h"
-#include "effects/VtkSamplePointsSurfaceEffect.h"
-#include "effects/VtkSamplePointsVolumeEffect.h"
-#include "effects/VtkTetrahedralWireframeEffect.h"
-#include "effects/VtkDecimateEffect.h"
-#include "effects/VtkSmoothEffect.h"
-#include "effects/VtkSurfaceDistanceEffect.h"
-#include "effects/VtkFillHolesEffect.h"
+#pragma once
 
-MfxRegister(
-        VtkExtractEdgesEffect,
-        VtkMakeTubesEffect,
-        // VtkReduceEdgesEffect,
-        VtkSamplePointsSurfaceEffect,
-        VtkSamplePointsVolumeEffect,
-        VtkTetrahedralWireframeEffect,
-        VtkDecimateEffect,
-        VtkSmoothEffect,
-        VtkSurfaceDistanceEffect,
-        VtkFillHolesEffect
-);
+#include <vtkFloatArray.h>
+#include "VtkEffect.h"
+
+class VtkSurfaceDistanceEffect : public VtkEffect {
+private:
+    const char *PARAM_NORMALIZE_DISTANCE = "NormalizeDistance";
+public:
+    const char* GetName() override;
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override;
+    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
+    static vtkFloatArray* compute_distance(vtkPolyData *input_polydata, int num_source_points, const int *source_points);
+};

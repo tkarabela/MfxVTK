@@ -27,7 +27,7 @@ set(SRC
   VtkEffect.cpp
   VtkEffect.h
         mfx_vtk_utils.h
-  effects/VtkReduceEdgesEffect.cpp effects/VtkReduceEdgesEffect.h effects/VtkTetrahedralWireframeEffect.cpp effects/VtkTetrahedralWireframeEffect.h effects/VtkSamplePointsVolumeEffect.cpp effects/VtkSamplePointsVolumeEffect.h effects/VtkMakeTubesEffect.cpp effects/VtkMakeTubesEffect.h effects/VtkFillHolesEffect.cpp effects/VtkFillHolesEffect.h effects/VtkSamplePointsSurfaceEffect.cpp effects/VtkSamplePointsSurfaceEffect.h effects/VtkDecimateEffect.cpp effects/VtkDecimateEffect.h effects/VtkSmoothEffect.cpp effects/VtkSmoothEffect.h VtkEffectUtils.cpp VtkEffectUtils.h)
+  effects/VtkReduceEdgesEffect.cpp effects/VtkReduceEdgesEffect.h effects/VtkTetrahedralWireframeEffect.cpp effects/VtkTetrahedralWireframeEffect.h effects/VtkSamplePointsVolumeEffect.cpp effects/VtkSamplePointsVolumeEffect.h effects/VtkMakeTubesEffect.cpp effects/VtkMakeTubesEffect.h effects/VtkFillHolesEffect.cpp effects/VtkFillHolesEffect.h effects/VtkSamplePointsSurfaceEffect.cpp effects/VtkSamplePointsSurfaceEffect.h effects/VtkDecimateEffect.cpp effects/VtkDecimateEffect.h effects/VtkSmoothEffect.cpp effects/VtkSmoothEffect.h effects/VtkSurfaceDistanceEffect.cpp effects/VtkSurfaceDistanceEffect.h VtkEffectUtils.cpp VtkEffectUtils.h)
 
 set(LIB
   openmesheffect_openfx

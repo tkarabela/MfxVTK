@@ -28,3 +28,5 @@ Bunny from Spheres
    - 6000 points
    - *Distribute uniformly* turned off
 - Create a UV sphere, parent it to Bunny, set *Instancing* to *Verts* in Bunny's Object properties
+
+.. TODO add example with surface distance effect!

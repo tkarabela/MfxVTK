@@ -38,6 +38,8 @@ OfxStatus VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters) {
     AddParam(PARAM_FEATURE_EDGE_SMOOTHING, false).Label("Feature edge smoothing");
     AddParam(PARAM_FEATURE_ANGLE, 45.0).Range(0.001, 180.0).Label("Feature angle");
     AddParam(PARAM_EDGE_ANGLE, 15.0).Range(0.001, 180.0).Label("Edge angle");
+
+    // TODO declare this is a deformer
     return kOfxStatOK;
 }
 

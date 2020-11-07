@@ -45,6 +45,7 @@ that make sense.
 
    effects/smooth
    effects/decimate
+   effects/surface-distance
    effects/fill-holes
 
 .. Connect Tetrahedra
