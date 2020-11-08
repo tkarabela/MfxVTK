@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include <vtkOctreePointLocator.h>
 #include <vtkStaticCellLinks.h>
 #include <vtkWarpVector.h>
+#include <vtkXMLPolyDataWriter.h>
 
 const char *VtkPokeEffect::GetName() {
     return "Poke";
@@ -51,8 +52,10 @@ OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters) {
     AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");
     AddParam(PARAM_FALLOFF_EXPONENT, 2.0).Range(1e-2, 1e2).Label("Falloff exponent");
     AddParam(PARAM_COLLISION_SMOOTHING_RATIO, 0.001).Range(0.0, 1.0).Label("Collision smoothing ratio");
+    AddParam(PARAM_COLLIDER_NORMAL_FACTOR, 0.0).Range(0.0, 1.0).Label("Collider normal factor");
     AddParam(PARAM_NUMBER_OF_ITERATIONS, 20).Range(1, 10000).Label("Number of iterations");
     AddParam(PARAM_OFFSET, 0.0).Range(0.0, 1e6).Label("Offset");
+    AddParam(PARAM_DEBUG, false).Label("Debug");
     return kOfxStatOK;
 }
 
@@ -61,8 +64,10 @@ OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *outpu
     auto falloff_radius = GetParam<double>(PARAM_FALLOFF_RADIUS).GetValue();
     auto falloff_exponent = GetParam<double>(PARAM_FALLOFF_EXPONENT).GetValue();
     auto collision_smoothing_ratio = GetParam<double>(PARAM_COLLISION_SMOOTHING_RATIO).GetValue();
+    auto collider_normal_factor = GetParam<double>(PARAM_COLLIDER_NORMAL_FACTOR).GetValue();
     auto number_of_iterations = GetParam<int>(PARAM_NUMBER_OF_ITERATIONS).GetValue();
     auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
+    auto debug = GetParam<bool>(PARAM_DEBUG).GetValue();
 
     if (!input_polydata->GetPointData()->HasArray("color0")) {
         printf("VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
@@ -72,17 +77,20 @@ OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *outpu
     // XXX NOTE TO USER - paint mesh white and collider black...
 
     vtkCook_inner(input_polydata, output_polydata, max_distance, falloff_radius, falloff_exponent,
-                  collision_smoothing_ratio, offset, number_of_iterations);
+                  collision_smoothing_ratio, offset, number_of_iterations, debug, collider_normal_factor);
 
     return kOfxStatOK;
 }
 
 OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance,
-                                       double falloff_radius, double falloff_exponent, double collision_smoothing_ratio,
-                                       double offset, int number_of_iterations) {
+                                       double falloff_radius,
+                                       double falloff_exponent, double collision_smoothing_ratio, double offset,
+                                       int number_of_iterations,
+                                       bool debug, double collider_normal_factor) {
     auto t0 = std::chrono::system_clock::now();
 
     // remember point IDs so that we can map deformed mesh onto input_polydata
+    // TODO even better would be to keep input vtkPoints as much as possible
     const char *point_id_array_name = "_PointId";
     auto id_filter = vtkSmartPointer<vtkIdFilter>::New();
     id_filter->SetInputData(input_polydata);
@@ -132,7 +140,7 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
     }
     printf("VtkPokeEffect - max_distance = %g\n", max_distance);
 
-    auto contacts = evaluate_collision(mesh_polydata, collider_polydata, max_distance, offset);
+    auto contacts = evaluate_collision(mesh_polydata, collider_polydata, max_distance, offset, debug, collider_normal_factor);
     auto t2 = std::chrono::system_clock::now();
     handle_reaction_laplacian(mesh_polydata, contacts, falloff_radius, falloff_exponent, number_of_iterations, collision_smoothing_ratio);
     auto t3 = std::chrono::system_clock::now();
@@ -167,8 +175,42 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
 
 std::vector<VtkPokeEffect::Contact>
 VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata, double max_distance,
-                                  double offset) {
+                                  double offset, bool debug, double collider_normal_factor) {
     std::vector<Contact> contacts;
+    int n = mesh_polydata->GetNumberOfPoints();
+    double mesh_diagonal_length = mesh_polydata->GetLength();
+    
+    vtkFloatArray *this_to_collider_arr = nullptr, *this_to_mesh_arr = nullptr, *mesh_to_collider_arr = nullptr, *contact_arr = nullptr;
+    
+    if (debug) {
+        this_to_collider_arr = vtkFloatArray::New();
+        this_to_collider_arr->SetNumberOfComponents(1);
+        this_to_collider_arr->SetNumberOfTuples(n);
+        this_to_collider_arr->FillValue(vtkMath::Nan());
+        this_to_collider_arr->SetName("this_to_collider");
+        mesh_polydata->GetPointData()->AddArray(this_to_collider_arr);
+
+        this_to_mesh_arr = vtkFloatArray::New();
+        this_to_mesh_arr->SetNumberOfComponents(1);
+        this_to_mesh_arr->SetNumberOfTuples(n);
+        this_to_mesh_arr->FillValue(vtkMath::Nan());
+        this_to_mesh_arr->SetName("this_to_mesh");
+        mesh_polydata->GetPointData()->AddArray(this_to_mesh_arr);
+
+        mesh_to_collider_arr = vtkFloatArray::New();
+        mesh_to_collider_arr->SetNumberOfComponents(1);
+        mesh_to_collider_arr->SetNumberOfTuples(n);
+        mesh_to_collider_arr->FillValue(vtkMath::Nan());
+        mesh_to_collider_arr->SetName("mesh_to_collider");
+        mesh_polydata->GetPointData()->AddArray(mesh_to_collider_arr);
+
+        contact_arr = vtkFloatArray::New();
+        contact_arr->SetNumberOfComponents(3);
+        contact_arr->SetNumberOfTuples(n);
+        contact_arr->FillValue(0);
+        contact_arr->SetName("contact");
+        mesh_polydata->GetPointData()->AddArray(contact_arr);
+    }
 
     if (offset > 0) {
         auto warp_filter = vtkSmartPointer<vtkWarpVector>::New();
@@ -208,7 +250,7 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
                                      collider_bounds[5] + max_distance };
 
     // step 1 - clear mesh collision with collider
-    for (int i = 0; i < mesh_polydata->GetNumberOfPoints(); i++) {
+    for (int i = 0; i < n; i++) {
         double p[3];
         double mesh_point[3], collider_point[3];
         double mesh_normal[3], collider_cell_normal[3];
@@ -223,6 +265,7 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
 
         mesh_normals->GetTuple(i, mesh_normal);
 
+        // Raycasting setup, where each point will fire a ray "behind" it in normal direction.
         const double p0[3] =    { p[0] - 1e-6*mesh_normal[0],
                                   p[1] - 1e-6*mesh_normal[1],
                                   p[2] - 1e-6*mesh_normal[2] }; // probe line start, just under point
@@ -257,6 +300,12 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
             }
         }
 
+        if (debug) {
+            this_to_collider_arr->SetValue(i, std::sqrt(this_to_collider_sq));
+            this_to_mesh_arr->SetValue(i, std::sqrt(this_to_mesh_sq));
+            mesh_to_collider_arr->SetValue(i, std::sqrt(mesh_to_collider_sq));
+        }
+
         // step 1, final breakdown
         if (this_to_mesh_sq < this_to_collider_sq) {
             // collider is outside this section of mesh
@@ -273,12 +322,39 @@ VtkPokeEffect::evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *colli
                 //printf("point %d - NO, bad angle %g\n", i, x);
             } else {
                 double distance = std::sqrt(this_to_collider_sq);
-                contacts.push_back({ .pid = i,
-                                     .dx = static_cast<float>(-mesh_normal[0] * distance),
-                                     .dy = static_cast<float>(-mesh_normal[1] * distance),
-                                     .dz = static_cast<float>(-mesh_normal[2] * distance)});
+                double v[3];
+                for (int j = 0; j < 3; j++) {
+                    v[j] = -mesh_normal[j]*(1.0-collider_normal_factor) + collider_cell_normal[j]*collider_normal_factor;
+                }
+
+                Contact contact = { .pid = i,
+                                    .dx = static_cast<float>(v[0] * distance),
+                                    .dy = static_cast<float>(v[1] * distance),
+                                    .dz = static_cast<float>(v[2] * distance)};
+                contacts.push_back(contact);
+
+                if (debug) {
+                    contact_arr->SetTuple3(i, contact.dx, contact.dy, contact.dz);
+                }
                 //printf("point %d - OK, moving by distance %g\n", i, distance);
             }
+        }
+    }
+
+    if (debug) {
+        {
+            auto writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+            writer->SetInputData(mesh_polydata);
+            printf("VtkPokeEffect - dumping mesh to vtkpokeeffect-mesh.vtp\n");
+            writer->SetFileName("vtkpokeeffect.vtp");
+            writer->Write();
+        }
+        {
+            auto writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+            writer->SetInputData(collider_polydata);
+            printf("VtkPokeEffect - dumping collider to vtkpokeeffect-collider.vtp\n");
+            writer->SetFileName("vtkpokeeffect-collider.vtp");
+            writer->Write();
         }
     }
 

@@ -31,8 +31,10 @@ private:
     const char *PARAM_FALLOFF_RADIUS = "FalloffRadius";
     const char *PARAM_FALLOFF_EXPONENT = "FalloffExponent";
     const char *PARAM_COLLISION_SMOOTHING_RATIO = "CollisionSmoothingRatio";
+    const char *PARAM_COLLIDER_NORMAL_FACTOR = "ColliderNormalFactor";
     const char *PARAM_NUMBER_OF_ITERATIONS = "NumberOfIterations";
     const char *PARAM_OFFSET = "Offset";
+    const char *PARAM_DEBUG = "Debug";
 
 public:
     struct Contact { int pid; float dx, dy, dz; };
@@ -40,13 +42,16 @@ public:
     const char* GetName() override;
     OfxStatus vtkDescribe(OfxParamSetHandle parameters) override;
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
-    static OfxStatus vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance, double falloff_radius,
-                                   double falloff_exponent, double collision_smoothing_ratio, double offset, int number_of_iterations);
+    static OfxStatus
+    vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance, double falloff_radius,
+                  double falloff_exponent, double collision_smoothing_ratio, double offset, int number_of_iterations,
+                  bool debug, double collider_normal_factor);
 
     /* Find out which mesh points need to be moved to clear the collision.
      * */
-    static std::vector<Contact> evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata,
-                                                   double max_distance, double offset);
+    static std::vector<Contact>
+    evaluate_collision(vtkPolyData *mesh_polydata, vtkPolyData *collider_polydata, double max_distance, double offset,
+                       bool debug, double collider_normal_factor);
 
     /* Clear collision by depressing points along their normals;
      * create falloff by laplacian smoothing weighted by manifold distance from the collision.
