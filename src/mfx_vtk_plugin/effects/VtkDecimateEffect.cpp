@@ -30,7 +30,8 @@ const char *VtkDecimateEffect::GetName() {
     return "Decimate";
 }
 
-OfxStatus VtkDecimateEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkDecimateEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     // to make this more akin to Blender Decimate, we use target "keep" ratio instead of "remove" ratio
     // which is used by the underlying VTK filter (SetTargetReduction)
     AddParam(PARAM_TARGET_RATIO, 1.0).Range(0.0, 1.0).Label("Target ratio");

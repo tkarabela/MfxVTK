@@ -28,13 +28,13 @@ THE SOFTWARE.
 #include <vtkXMLPolyDataWriter.h>
 
 OfxStatus VtkEffect::Describe(OfxMeshEffectHandle descriptor) {
-    AddInput(kOfxMeshMainInput);
-    AddInput(kOfxMeshMainOutput);
+    auto input_mesh = AddInput(kOfxMeshMainInput);
+    auto output_mesh = AddInput(kOfxMeshMainOutput);
 
     OfxParamSetHandle parameters;
     meshEffectSuite->getParamSet(descriptor, &parameters);
 
-    return vtkDescribe(parameters);
+    return vtkDescribe(parameters, input_mesh, output_mesh);
 }
 
 OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
@@ -44,6 +44,18 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     auto t_cook_start = std::chrono::system_clock::now();
     MfxMesh input_mesh = GetInput(kOfxMeshMainInput).GetMesh();
     auto t_cook_after_mfx_prologue = std::chrono::system_clock::now();
+
+    /*
+    printf("input transform matrix is:\n");
+    MfxMeshProps mesh_props;
+    input_mesh.FetchProperties(mesh_props);
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            printf("\t%+.3f", mesh_props.transformMatrix[i][j]);
+        }
+        printf("\n");
+    }
+    */
 
     // prepare input, VTK side
     auto vtk_input_polydata = mfx_mesh_to_vtkpolydata(input_mesh);  // TODO handle attributes

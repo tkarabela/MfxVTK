@@ -32,7 +32,8 @@ const char *VtkMakeTubesEffect::GetName() {
     return "Make tubes";
 }
 
-OfxStatus VtkMakeTubesEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkMakeTubesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     AddParam(PARAM_RADIUS, 0.02).Range(1e-6, 1e6).Label("Radius");
     AddParam(PARAM_NUMBER_OF_SIDES, 6).Range(3, 1000).Label("Number of sides");
     AddParam(PARAM_CAPPING, true).Label("Cap ends");

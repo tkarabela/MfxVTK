@@ -30,7 +30,8 @@ const char *VtkExtractEdgesEffect::GetName() {
     return "Feature edges";
 }
 
-OfxStatus VtkExtractEdgesEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkExtractEdgesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     AddParam(PARAM_FEATURE_ANGLE, 30.0).Range(0, 180.0).Label("Feature angle");
     AddParam(PARAM_FEATURE_EDGES, true).Label("Extract feature edges");
     AddParam(PARAM_BOUNDARY_EDGES, false).Label("Extract boundary edges");

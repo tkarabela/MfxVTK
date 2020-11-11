@@ -32,8 +32,10 @@ const char *VtkSurfaceDistanceEffect::GetName() {
     return "Surface distance";
 }
 
-OfxStatus VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters) {
-    // TODO add input color attribute when it lands in OFX
+OfxStatus
+VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+    input_mesh.RequestAttribute(kOfxMeshAttribVertex, "color0", 3, kOfxMeshAttribTypeUByte, kOfxMeshAttribSemanticColor, true);
+
     // TODO declare this is a deformer
 
     AddParam(PARAM_NORMALIZE_DISTANCE, true).Label("Normalize distance");

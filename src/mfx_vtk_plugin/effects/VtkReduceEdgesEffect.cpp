@@ -28,7 +28,8 @@ const char *VtkReduceEdgesEffect::GetName() {
     return "Reduce edges";
 }
 
-OfxStatus VtkReduceEdgesEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkReduceEdgesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     AddParam(PARAM_MAXIMUM_LENGTH, 1.0).Range(0, 1e6).Label("Maximum length");
     return kOfxStatOK;
 }

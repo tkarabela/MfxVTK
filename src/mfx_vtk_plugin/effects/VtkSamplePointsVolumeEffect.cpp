@@ -35,7 +35,8 @@ const char *VtkSamplePointsVolumeEffect::GetName() {
     return "Sample points (volume)";
 }
 
-OfxStatus VtkSamplePointsVolumeEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus VtkSamplePointsVolumeEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
+                                                   MfxInputDef &output_mesh) {
     AddParam(PARAM_NUMBER_OF_POINTS, 200).Range(1, 1e6).Label("Number of points");
     AddParam(PARAM_DISTRIBUTE_UNIFORMLY, true).Label("Distribute points uniformly");
     AddParam(PARAM_AUTO_SIMPLIFY, true).Label("Auto simplify input mesh");

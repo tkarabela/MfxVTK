@@ -30,7 +30,8 @@ const char *VtkFillHolesEffect::GetName() {
     return "Fill holes";
 }
 
-OfxStatus VtkFillHolesEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkFillHolesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     AddParam(PARAM_HOLE_SIZE, 1.0).Range(0, 1e6).Label("Maximum hole size");
     return kOfxStatOK;
 }

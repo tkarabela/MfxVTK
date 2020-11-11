@@ -33,7 +33,8 @@ const char *VtkTetrahedralWireframeEffect::GetName() {
     return "Tetrahedral wireframe";
 }
 
-OfxStatus VtkTetrahedralWireframeEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus VtkTetrahedralWireframeEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
+                                                     MfxInputDef &output_mesh) {
     AddParam(PARAM_MAXIMUM_EDGE_LENGTH, 1.0).Range(0, 1e6).Label("Maximum edge length");
     return kOfxStatOK;
 }

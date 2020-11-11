@@ -55,7 +55,7 @@ public:
         return "Mask points";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
         AddParam(PARAM_RANDOM_MODE, true).Label("Use point selection");
         AddParam(PARAM_RANDOM_MODE_TYPE, 0).Range(0, 3).Label("Random distribution type"); // TODO replace this with enum
         AddParam(PARAM_ON_RATIO, 2).Label("Take every n-th point");
@@ -111,7 +111,7 @@ public:
         return "Decimate (pro)";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
         AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(0, 1 - 1e-6).Label("Target reduction");
         AddParam(PARAM_PRESERVE_TOPOLOGY, false).Label("Preserve topology");
         AddParam(PARAM_FEATURE_ANGLE, 15.0).Range(0.001, 180.0).Label("Feature angle");
@@ -228,7 +228,7 @@ public:
         return "Decimate (quadratic clustering)";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
         AddParam(PARAM_NUMBER_OF_DIVISIONS, std::array<int,3>{256, 256, 256})
             .Range({2, 2, 2}, {0xffff, 0xffff, 0xffff})
             .Label("Number of divisions");
@@ -263,7 +263,7 @@ public:
         return "Identity";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
         AddParam(PARAM_ACTION_IS_IDENTITY, false).Label("kOfxMeshEffectActionIsIdentity");
         return kOfxStatOK;
     }

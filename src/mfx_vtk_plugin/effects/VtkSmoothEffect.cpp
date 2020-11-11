@@ -30,7 +30,8 @@ const char *VtkSmoothEffect::GetName() {
     return "Smooth";
 }
 
-OfxStatus VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus
+VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
     AddParam(PARAM_MODE, MODE_WINDOWED_SINC).Range(1, 2).Label("Mode"); // TODO make this enum!
     AddParam(PARAM_ITERATIONS, 20).Range(1, 1000).Label("Iterations");
     AddParam(PARAM_FACTOR, 0.1).Range(0.0, 1000.0).Label("Factor");

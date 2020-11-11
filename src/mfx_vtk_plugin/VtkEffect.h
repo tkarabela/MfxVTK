@@ -32,7 +32,7 @@ protected:
     OfxStatus Cook(OfxMeshEffectHandle instance) override;
     OfxStatus IsIdentity(OfxMeshEffectHandle instance) override;
 
-    virtual OfxStatus vtkDescribe(OfxParamSetHandle parameters) = 0;
+    virtual OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) = 0;
     virtual OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) = 0;
     virtual bool vtkIsIdentity(OfxParamSetHandle parameters);
 };

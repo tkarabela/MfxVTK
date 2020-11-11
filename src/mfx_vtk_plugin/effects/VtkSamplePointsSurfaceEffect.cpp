@@ -31,7 +31,8 @@ const char *VtkSamplePointsSurfaceEffect::GetName() {
     return "Sample points (surface)";
 }
 
-OfxStatus VtkSamplePointsSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus VtkSamplePointsSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
+                                                    MfxInputDef &output_mesh) {
     AddParam(PARAM_DISTANCE, 0.1).Range(1e-6, 1e6).Label("Distance");
     // AddParam(PARAM_DISTRIBUTE_UNIFORMLY, true).Label("Distribute points uniformly");
     // AddParam(PARAM_GENERATE_VERTEX_POINTS, true).Label("Generate vertex points");

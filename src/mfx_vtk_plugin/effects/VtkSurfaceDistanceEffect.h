@@ -31,7 +31,7 @@ private:
     const char *PARAM_NORMALIZE_DISTANCE = "NormalizeDistance";
 public:
     const char* GetName() override;
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters) override;
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override;
     OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
     static vtkFloatArray* compute_distance(vtkPolyData *input_polydata, int num_source_points, const int *source_points);
 };
