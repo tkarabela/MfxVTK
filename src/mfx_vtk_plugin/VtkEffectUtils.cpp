@@ -407,7 +407,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
-            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeUByte);
+            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeUByte, kOfxMeshAttribSemanticColor);
         }
     }
     for (int k = 0; k < 4; k++) {
@@ -416,7 +416,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
-            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeFloat);
+            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeFloat, kOfxMeshAttribSemanticTextureCoordinate);
         }
     }
 
