@@ -23,18 +23,24 @@ set(INC
   .
 )
 
+file(GLOB SRC_EFFECTS effects/*.cpp effects/*.h)
+
 set(SRC
   VtkEffect.cpp
   VtkEffect.h
-        mfx_vtk_utils.h
-  effects/VtkReduceEdgesEffect.cpp effects/VtkReduceEdgesEffect.h effects/VtkTetrahedralWireframeEffect.cpp effects/VtkTetrahedralWireframeEffect.h effects/VtkSamplePointsVolumeEffect.cpp effects/VtkSamplePointsVolumeEffect.h effects/VtkMakeTubesEffect.cpp effects/VtkMakeTubesEffect.h effects/VtkFillHolesEffect.cpp effects/VtkFillHolesEffect.h effects/VtkSamplePointsSurfaceEffect.cpp effects/VtkSamplePointsSurfaceEffect.h effects/VtkDecimateEffect.cpp effects/VtkDecimateEffect.h effects/VtkSmoothEffect.cpp effects/VtkSmoothEffect.h effects/VtkSurfaceDistanceEffect.cpp effects/VtkSurfaceDistanceEffect.h VtkEffectUtils.cpp VtkEffectUtils.h)
-
-set(LIB
-  openmesheffect_openfx
-  CppPluginSupport
+  VtkEffectUtils.cpp
+  VtkEffectUtils.h
+  mfx_vtk_utils.h
+  ${SRC_EFFECTS}
 )
 
-# vtk
+# OpenMeshEffect dependency
+set(LIB
+  OpenMeshEffect::Core
+  OpenMeshEffect::Sdk
+)
+
+# VTK dependency, part 1
 find_package(VTK COMPONENTS
         vtkCommonCore
         vtkCommonDataModel
@@ -50,22 +56,25 @@ if (NOT VTK_FOUND)
 endif()
 message (STATUS "VTK_VERSION: ${VTK_VERSION}")
 
-add_library(mfx_vtk_plugin SHARED mfx_vtk_plugin.cpp ${SRC} effects/VtkExtractEdgesEffect.cpp effects/VtkExtractEdgesEffect.h)
+# Main target (for effects in ./effects)
+add_library(mfx_vtk_plugin SHARED mfx_vtk_plugin.cpp ${SRC})
 target_include_directories(mfx_vtk_plugin PRIVATE ${INC})
 target_link_libraries(mfx_vtk_plugin PRIVATE ${LIB} ${VTK_LIBRARIES})
 set_target_properties(mfx_vtk_plugin PROPERTIES SUFFIX ".ofx")
 
+# Extra target (for effects in mfx_vtk_plugin_extra.cpp)
 add_library(mfx_vtk_plugin_extra SHARED mfx_vtk_plugin_extra.cpp ${SRC})
 target_include_directories(mfx_vtk_plugin_extra PRIVATE ${INC})
 target_link_libraries(mfx_vtk_plugin_extra PRIVATE ${LIB} ${VTK_LIBRARIES})
 set_target_properties(mfx_vtk_plugin_extra PROPERTIES SUFFIX ".ofx")
 
+# VTK dependency, part 2
 vtk_module_autoinit(
         TARGETS mfx_vtk_plugin mfx_vtk_plugin_extra
         MODULES ${VTK_LIBRARIES}
 )
 
-# openmp
+# OpenMP dependency
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(mfx_vtk_plugin PUBLIC OpenMP::OpenMP_CXX)

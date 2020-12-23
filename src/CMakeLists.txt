@@ -21,6 +21,5 @@
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-add_subdirectory(OpenMeshEffect/examples)
-add_subdirectory(OpenMeshEffect/CppPluginSupport)
+add_subdirectory(OpenMeshEffect)
 add_subdirectory(mfx_vtk_plugin)
