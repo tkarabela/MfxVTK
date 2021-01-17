@@ -281,6 +281,229 @@ public:
 
 // ----------------------------------------------------------------------------
 
+static void print_matrix(double m[16]) {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            printf("\t%.4g", m[4*i+j]);
+        }
+        printf("\n");
+    }
+}
+
+static void copy_matrix(double* in, double *out) {
+    for (int i = 0; i < 16; ++i) {
+        out[i] = in[i];
+    }
+}
+
+static void invert_matrix(double m[16]) {
+    double **A = new double*[4];
+    double **AI = new double*[4];
+    for (int i = 0; i < 4; ++i) {
+        A[i] = new double[4];
+        AI[i] = new double[4];
+        for (int j = 0; j < 4; ++j) {
+            A[i][j] = m[4*i + j];
+            AI[i][j] = 0.0;
+        }
+    }
+
+    vtkMath::InvertMatrix(A, AI, 4);
+
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            m[4*i + j] = AI[i][j];
+        }
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        delete[] A[i];
+        delete[] AI[i];
+    }
+
+    delete[] A;
+    delete[] AI;
+}
+
+static void multiply_matrix(double A[16], double B[16], double *C) {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            C[4*i+j] = 0.0;
+            for (int k = 0; k < 4; ++k) {
+                C[4*i+j] += A[4*i+k] * B[4*k+j];
+            }
+        }
+    }
+}
+
+static void transform_coordinates(double A[16], double xyz[3]) {
+    double x[4] = { xyz[0], xyz[1], xyz[2], 1.0 }, b[4] = {0.0, 0.0, 0.0, 0.0};
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            b[i] += A[4*i+j] * x[j];
+        }
+    }
+    for (int i = 0; i < 3; ++i) {
+        xyz[i] = b[i];
+    }
+}
+
+class AppendInputEffect : public MfxEffect {
+public:
+    const char *SECOND_INPUT_NAME = "SecondInput";
+
+    const char* GetName() override {
+        return "Append input (second mesh)";
+    }
+
+    OfxStatus Describe(OfxMeshEffectHandle descriptor) override {
+        auto main_input = AddInput(kOfxMeshMainInput);
+        main_input.RequestTransform(true);
+        AddInput(kOfxMeshMainOutput);
+        auto second_mesh = AddInput(SECOND_INPUT_NAME);
+        second_mesh.Label("Second input");
+        second_mesh.RequestTransform(true);
+        return kOfxStatOK;
+    }
+
+    OfxStatus Cook(OfxMeshEffectHandle instance) override {
+        MfxMesh input_mesh = GetInput(kOfxMeshMainInput).GetMesh();
+        MfxMesh second_mesh = GetInput(SECOND_INPUT_NAME).GetMesh();
+        MfxMesh output_mesh = GetInput(kOfxMeshMainOutput).GetMesh();
+
+        MfxMesh* input_meshes[2] = { &input_mesh, &second_mesh };
+
+        int pointCount = 0, vertexCount = 0, faceCount = 0, noLooseEdge = 1, constantFaceCount = -1;
+
+        for (int i = 0; i < 2; i++) {
+            if (!input_meshes[i]->IsValid()) {
+                printf("Error - input mesh %d is not valid\n", i);
+                return kOfxStatFailed; // XXX ??
+            }
+
+            MfxMeshProps props;
+            input_meshes[i]->FetchProperties(props);
+
+            printf("OFX input_mesh[%d] has %d points %d vertices %d faces\n", i, props.pointCount, props.vertexCount, props.faceCount);
+
+            pointCount += props.pointCount;
+            vertexCount += props.vertexCount;
+            faceCount += props.faceCount;
+            if (!props.noLooseEdge) noLooseEdge = 0;
+        }
+
+        double *m1 = nullptr;
+        double *m2 = nullptr;
+        input_mesh.FetchTransform(reinterpret_cast<double **>(&m1));
+        second_mesh.FetchTransform(reinterpret_cast<double **>(&m2));
+
+        printf("m1:\n");
+        print_matrix(m1);
+        printf("\n");
+        printf("m2:\n");
+        print_matrix(m2);
+        printf("\n");
+
+        double m1_inv[16];
+        copy_matrix(m1, m1_inv);
+        invert_matrix(m1_inv);
+
+        printf("inv(m1):\n");
+        print_matrix(m1_inv);
+        printf("\n");
+
+        double m1_inv_m2[16];
+        multiply_matrix(m1_inv, m2, m1_inv_m2);
+        printf("inv(m1) . m2:\n");
+        print_matrix(m1_inv_m2);
+        printf("\n");
+
+        printf("OFX output mesh has %d points %d vertices %d faces\n", pointCount, vertexCount, faceCount);
+        output_mesh.Allocate(pointCount,
+                             vertexCount,
+                             faceCount,
+                             noLooseEdge,
+                             constantFaceCount);
+
+        MfxMeshProps output_mesh_properties;
+        output_mesh.FetchProperties(output_mesh_properties);
+
+        MfxAttribute output_pointPos = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
+        MfxAttribute output_vertPoint = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
+        MfxAttribute output_faceLen = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+
+        int i_pointPos = 0, i_vertPoint = 0, i_faceLen = 0, point_start_id = 0;
+
+        for (int i = 0; i < 2; i++) {
+            MfxMeshProps input_mesh_props;
+            input_meshes[i]->FetchProperties(input_mesh_props);
+            int constant_face_count = input_mesh_props.constantFaceCount;
+
+            MfxAttribute input_pointPos = input_meshes[i]->GetPointAttribute(kOfxMeshAttribPointPosition);
+            MfxAttribute input_vertPoint = input_meshes[i]->GetVertexAttribute(kOfxMeshAttribVertexPoint);
+            MfxAttribute input_faceLen = input_meshes[i]->GetFaceAttribute(kOfxMeshAttribFaceCounts);
+
+            MfxAttributeProps in_prop, out_prop;
+
+            input_pointPos.FetchProperties(in_prop);
+            output_pointPos.FetchProperties(out_prop);
+            for (int j = 0; j < input_mesh_props.pointCount; j++) {
+                double xyz[3];
+                for (int k = 0; k < 3; k++) {
+                    float x;
+                    in_prop.GetValue(&x, j, k);
+                    xyz[k] = x;
+                    // out_prop.SetValue(x, i_pointPos, k);
+                }
+
+                if (i > 0) {
+                    transform_coordinates(m1_inv_m2, xyz);
+                }
+
+                for (int k = 0; k < 3; k++) {
+                    float x = xyz[k];
+                    out_prop.SetValue(x, i_pointPos, k);
+                }
+
+                i_pointPos++;
+            }
+
+            input_vertPoint.FetchProperties(in_prop);
+            output_vertPoint.FetchProperties(out_prop);
+            for (int j = 0; j < input_mesh_props.vertexCount; j++) {
+                int x;
+                in_prop.GetValue(&x, j);
+                //out_prop.SetValue(x, i_vertPoint);
+                out_prop.SetValue(x + point_start_id, i_vertPoint);
+                //printf("output_vertPoint[%d] = %d\n", i_vertPoint, x+vertex_start_id);
+                i_vertPoint++;
+            }
+            point_start_id += input_mesh_props.pointCount;
+
+            input_faceLen.FetchProperties(in_prop);
+            output_faceLen.FetchProperties(out_prop);
+            for (int j = 0; j < input_mesh_props.faceCount; j++) {
+                int x;
+                if (constant_face_count > 0) {
+                    x = constant_face_count;
+                } else {
+                    in_prop.GetValue(&x, j);
+                }
+                out_prop.SetValue(x, i_faceLen);
+                i_faceLen++;
+            }
+        }
+
+        output_mesh.Release();
+        input_mesh.Release();
+        second_mesh.Release();
+
+        return kOfxStatOK;
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 class IdentityForwardAttributesEffect : public MfxEffect {
 public:
     const char* GetName() override {
@@ -336,5 +559,6 @@ MfxRegister(
 
     // these effects are interesting only for development of Open Mesh Effect
     VtkIdentityEffect,
-    IdentityForwardAttributesEffect
+    IdentityForwardAttributesEffect,
+    AppendInputEffect
 );
