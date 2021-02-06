@@ -31,7 +31,7 @@ const char *VtkFillHolesEffect::GetName() {
 }
 
 OfxStatus
-VtkFillHolesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+VtkFillHolesEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_HOLE_SIZE, 1.0).Range(0, 1e6).Label("Maximum hole size");
     return kOfxStatOK;
 }
@@ -41,9 +41,9 @@ bool VtkFillHolesEffect::vtkIsIdentity(OfxParamSetHandle parameters) {
     return !is_positive_double(hole_size);
 }
 
-OfxStatus VtkFillHolesEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkFillHolesEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto hole_size = GetParam<double>(PARAM_HOLE_SIZE).GetValue();
-    return vtkCook_inner(input_polydata, output_polydata, hole_size);
+    return vtkCook_inner(main_input.data, main_output.data, hole_size);
 }
 
 OfxStatus

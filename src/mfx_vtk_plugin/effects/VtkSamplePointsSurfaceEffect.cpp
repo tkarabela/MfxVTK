@@ -31,8 +31,8 @@ const char *VtkSamplePointsSurfaceEffect::GetName() {
     return "Sample points (surface)";
 }
 
-OfxStatus VtkSamplePointsSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
-                                                    MfxInputDef &output_mesh) {
+OfxStatus VtkSamplePointsSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh,
+                                                    VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_DISTANCE, 0.1).Range(1e-6, 1e6).Label("Distance");
     // AddParam(PARAM_DISTRIBUTE_UNIFORMLY, true).Label("Distribute points uniformly");
     // AddParam(PARAM_GENERATE_VERTEX_POINTS, true).Label("Generate vertex points");
@@ -42,7 +42,7 @@ OfxStatus VtkSamplePointsSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters
     return kOfxStatOK;
 }
 
-OfxStatus VtkSamplePointsSurfaceEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkSamplePointsSurfaceEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto distance = GetParam<double>(PARAM_DISTANCE).GetValue();
     // auto distribute_uniformly = GetParam<bool>(PARAM_DISTRIBUTE_UNIFORMLY).GetValue();
     auto generate_vertex_points = true; // GetParam<bool>(PARAM_GENERATE_VERTEX_POINTS).GetValue(); // TODO false crashes VTK 9.0.1, why?
@@ -50,7 +50,7 @@ OfxStatus VtkSamplePointsSurfaceEffect::vtkCook(vtkPolyData *input_polydata, vtk
     auto generate_interior_points = GetParam<bool>(PARAM_GENERATE_INTERIOR_POINTS).GetValue();
     // bool interpolate_point_data = GetParam<bool>(PARAM_INTERPOLATE_POINT_DATA).GetValue();
 
-    return vtkCook_inner(input_polydata, output_polydata, distance, generate_vertex_points,
+    return vtkCook_inner(main_input.data, main_output.data, distance, generate_vertex_points,
                          generate_edge_points, generate_interior_points);
 }
 

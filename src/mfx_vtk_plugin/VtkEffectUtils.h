@@ -25,5 +25,5 @@ THE SOFTWARE.
 
 #include "VtkEffect.h"
 
-vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata(MfxMesh &input_mesh);
-void vtkpolydata_to_mfx_mesh(MfxMesh &output_mesh, vtkPolyData *output_polydata);
+void mfx_mesh_to_vtkpolydata(VtkEffectInput &vtk_input, MfxMesh &input_mesh);
+void vtkpolydata_to_mfx_mesh(VtkEffectInput &vtk_input, MfxMesh &output_mesh);

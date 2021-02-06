@@ -31,7 +31,7 @@ const char *VtkSmoothEffect::GetName() {
 }
 
 OfxStatus
-VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_MODE, MODE_WINDOWED_SINC).Range(1, 2).Label("Mode"); // TODO make this enum!
     AddParam(PARAM_ITERATIONS, 20).Range(1, 1000).Label("Iterations");
     AddParam(PARAM_FACTOR, 0.1).Range(0.0, 1000.0).Label("Factor");
@@ -44,7 +44,7 @@ VtkSmoothEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_me
     return kOfxStatOK;
 }
 
-OfxStatus VtkSmoothEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkSmoothEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto mode = GetParam<int>(PARAM_MODE).GetValue();
     auto iterations = GetParam<int>(PARAM_ITERATIONS).GetValue();
     auto factor = GetParam<double>(PARAM_FACTOR).GetValue();
@@ -58,11 +58,11 @@ OfxStatus VtkSmoothEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *out
 
     if (mode == MODE_LAPLACIAN) {
         auto relaxation_factor = factor;
-        return vtkCook_inner_laplacian(input_polydata, output_polydata, iterations, relaxation_factor,
+        return vtkCook_inner_laplacian(main_input.data, main_output.data, iterations, relaxation_factor,
                                        boundary_smoothing, feature_edge_smoothing, feature_angle, edge_angle);
     } else if (mode == MODE_WINDOWED_SINC) {
         auto passband = clamp(factor, 0.0, 2.0);
-        return vtkCook_inner_windowed_sinc(input_polydata, output_polydata, iterations, passband,
+        return vtkCook_inner_windowed_sinc(main_input.data, main_output.data, iterations, passband,
                                            boundary_smoothing, feature_edge_smoothing, feature_angle, edge_angle);
     } else {
         // this should not happen

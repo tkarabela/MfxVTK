@@ -26,13 +26,15 @@ set(INC
 file(GLOB SRC_EFFECTS effects/*.cpp effects/*.h)
 
 set(SRC
-  VtkEffect.cpp
-  VtkEffect.h
-  VtkEffectUtils.cpp
-  VtkEffectUtils.h
-  mfx_vtk_utils.h
-  ${SRC_EFFECTS}
-)
+        VtkEffect.cpp
+        VtkEffect.h
+        VtkEffectUtils.cpp
+        VtkEffectUtils.h
+        VtkEffectInput.h
+        VtkEffectInputDef.cpp
+        VtkEffectInputDef.h
+        mfx_vtk_utils.h
+        ${SRC_EFFECTS})
 
 # OpenMeshEffect dependency
 set(LIB

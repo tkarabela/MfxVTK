@@ -33,8 +33,8 @@ const char *VtkSurfaceDistanceEffect::GetName() {
 }
 
 OfxStatus
-VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
-    input_mesh.RequestAttribute(kOfxMeshAttribVertex, "color0", 3, kOfxMeshAttribTypeUByte, kOfxMeshAttribSemanticColor, true);
+VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
+    input_mesh.RequestVertexAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
 
     // TODO declare this is a deformer
 
@@ -42,16 +42,18 @@ VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef 
     return kOfxStatOK;
 }
 
-OfxStatus VtkSurfaceDistanceEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
-    auto input_color_arr = input_polydata->GetPointData()->GetArray("color0");
+OfxStatus VtkSurfaceDistanceEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
+    auto input_color_arr = main_input.data->GetPointData()->GetArray("color0");
     auto normalize_distance = GetParam<bool>(PARAM_NORMALIZE_DISTANCE).GetValue();
+
+    // TODO use extra inputs here!!!
 
     if (!input_color_arr) {
         printf("VtkSurfaceDistanceEffect - missing input 'color0' attribute!\n");
         return kOfxStatFailed;
     }
 
-    int n = input_polydata->GetNumberOfPoints();
+    int n = main_input.data->GetNumberOfPoints();
     std::vector<int> source_points;
 
     for (int i = 0; i < n; i++) {
@@ -67,7 +69,7 @@ OfxStatus VtkSurfaceDistanceEffect::vtkCook(vtkPolyData *input_polydata, vtkPoly
         printf("VtkSurfaceDistanceEffect - I have %d source points\n", source_points.size());
     }
 
-    auto distance_arr = compute_distance(input_polydata, source_points.size(), source_points.data());
+    auto distance_arr = compute_distance(main_input.data, source_points.size(), source_points.data());
 
     auto output_uv_arr = vtkFloatArray::New();
     output_uv_arr->SetNumberOfComponents(2);
@@ -94,8 +96,8 @@ OfxStatus VtkSurfaceDistanceEffect::vtkCook(vtkPolyData *input_polydata, vtkPoly
     output_uv_arr->FillTypedComponent(1, 0.0);
     output_uv_arr->SetName("uv0"); // TODO handle output better w.r.t. existing UV arrays
 
-    output_polydata->ShallowCopy(input_polydata);
-    output_polydata->GetPointData()->AddArray(output_uv_arr);
+    main_output.data->ShallowCopy(main_input.data);
+    main_output.data->GetPointData()->AddArray(output_uv_arr);
 
     return kOfxStatOK;
 }

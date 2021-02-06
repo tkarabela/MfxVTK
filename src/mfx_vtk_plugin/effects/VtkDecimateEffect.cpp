@@ -31,7 +31,7 @@ const char *VtkDecimateEffect::GetName() {
 }
 
 OfxStatus
-VtkDecimateEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+VtkDecimateEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     // to make this more akin to Blender Decimate, we use target "keep" ratio instead of "remove" ratio
     // which is used by the underlying VTK filter (SetTargetReduction)
     AddParam(PARAM_TARGET_RATIO, 1.0).Range(0.0, 1.0).Label("Target ratio");
@@ -44,10 +44,10 @@ bool VtkDecimateEffect::vtkIsIdentity(OfxParamSetHandle parameters) {
     return target_ratio >= 1.0;
 }
 
-OfxStatus VtkDecimateEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkDecimateEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto target_ratio = GetParam<double>(PARAM_TARGET_RATIO).GetValue();
     auto volume_preservation = GetParam<bool>(PARAM_VOLUME_PRESERVATION).GetValue();
-    return vtkCook_inner(input_polydata, output_polydata, 1.0 - target_ratio, volume_preservation);
+    return vtkCook_inner(main_input.data, main_output.data, 1.0 - target_ratio, volume_preservation);
 }
 
 OfxStatus

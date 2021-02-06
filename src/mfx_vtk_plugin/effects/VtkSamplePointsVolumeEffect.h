@@ -33,8 +33,8 @@ private:
 
 public:
     const char* GetName() override;
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override;
-    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override;
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override;
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override;
     static OfxStatus vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,
                                    int number_of_points, bool distribute_uniformly, bool auto_simplify,
                                    bool _assume_input_polydata_triangles=false);

@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include <vtkCellArrayIterator.h>
 #include <vtkUnsignedCharArray.h>
 #include <vtkFloatArray.h>
+#include <vtkDataArray.h>
 #include <vtkPointData.h>
 #include <cassert>
 #include <chrono>
@@ -72,7 +73,13 @@ static void strided_copy(void *dest_ptr, const void *src_ptr, int count, int des
     }
 }
 
-vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_generic(MfxMesh &input_mesh) {
+template <typename T>
+T get_attribute_value(const MfxAttributeProps &attr, int idx, int component) {
+    T *ptr = reinterpret_cast<T*>(attr.data + idx*attr.stride);
+    return ptr[component];
+}
+
+vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_generic(const VtkEffectInput &vtk_input, MfxMesh &input_mesh) {
     MfxMeshProps inputProps;
     input_mesh.FetchProperties(inputProps);
 
@@ -143,11 +150,26 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_generic(MfxMesh &input_mesh
     }
     printf("MFX input has %d loose edges\n", loose_edge_count);
 
+    // copy requested attributes
+    for (auto &requested_attribute : vtk_input.definition->requested_attributes) {
+        if (!input_mesh.HasAttribute(requested_attribute.attachment, requested_attribute.name)) {
+            if (requested_attribute.mandatory) {
+                printf("MfxVTK error - missing mandatory attribute '%s' from input '%s'\n",
+                       requested_attribute.name, vtk_input.definition->name);
+            }
+            continue;
+        }
+
+        // TODO actually implement attribute reading for general input meshes
+        printf("MfxVTK warning - not reading attribute '%s' from input '%s' (attributes are currently only supported for polygonal meshes)\n",
+               requested_attribute.name, vtk_input.definition->name);
+    }
+
     return vtk_input_polydata;
 }
 
 // pre: no loose edges
-vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) {
+vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput &vtk_input, MfxMesh &input_mesh) {
     MfxMeshProps inputProps;
     input_mesh.FetchProperties(inputProps);
 
@@ -156,8 +178,8 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
     input_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
     input_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
 
-    printf("MFX input has %d points, %d vertices, %d faces\n",
-           inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
+    printf("MFX input (%s) has %d points, %d vertices, %d faces\n",
+           vtk_input.definition->name, inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
 
     // ------------------------------------------------------------------------
     // Create vtkPolyData from MFX mesh
@@ -213,74 +235,89 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(MfxMesh &input_mesh) 
         offset_array[inputProps.faceCount] = vertex_sum; // sentinel value
     }
 
-    // copy UV and color attributes
-    // TODO switch this to more general approach when available; implement for other mesh types as well
-    // note we cannot forward here since we have per-vertex data from OFX but VTK only has per-point data
-    for (int k = 0; k < 4; k++) {
-        char name[32];
-        sprintf(name, "color%d", k);
-
-        if (input_mesh.HasVertexAttribute(name)) {
-            MfxAttributeProps attr;
-            input_mesh.GetVertexAttribute(name).FetchProperties(attr);
-            assert(attr.type == MfxAttributeType::UByte);
-
-            auto array = vtkSmartPointer<vtkUnsignedCharArray>::New();
-            array->SetNumberOfComponents(attr.componentCount);
-            array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
-            array->FillValue(0);
-            array->SetName(name);
-            vtk_input_polydata->GetPointData()->AddArray(array);
-
-            for (int i = 0; i < inputProps.vertexCount; i++) {
-                int p = *(int*)(vertPoint.data + i*vertPoint.stride);
-                char *values = attr.data + i*attr.stride;
-                for (int j = 0; j < attr.componentCount; j++) {
-                    array->SetTypedComponent(p, j, values[j]);
-                }
+    // copy requested attributes
+    for (auto &requested_attribute : vtk_input.definition->requested_attributes) {
+        if (!input_mesh.HasAttribute(requested_attribute.attachment, requested_attribute.name)) {
+            if (requested_attribute.mandatory) {
+                printf("MfxVTK error - missing mandatory attribute '%s' from input '%s'\n", requested_attribute.name, vtk_input.definition->name);
             }
-            printf("MfxVTK - read array %s\n", name);
+            continue;
         }
-    }
 
-    for (int k = 0; k < 4; k++) {
-        char name[32];
-        sprintf(name, "uv%d", k);
+        MfxAttributeProps attr;
+        input_mesh.GetAttribute(requested_attribute.attachment, requested_attribute.name).FetchProperties(attr);
 
-        if (input_mesh.HasVertexAttribute(name)) {
-            MfxAttributeProps attr;
-            input_mesh.GetVertexAttribute(name).FetchProperties(attr);
-            assert(attr.type == MfxAttributeType::Float);
+        vtkDataArray* array = nullptr;
 
-            auto array = vtkSmartPointer<vtkFloatArray>::New();
-            array->SetNumberOfComponents(attr.componentCount);
-            array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
-            array->FillValue(0);
-            array->SetName(name);
-            vtk_input_polydata->GetPointData()->AddArray(array);
+        switch (attr.type) {
+            case MfxAttributeType::Float:
+                array = vtkFloatArray::New();
+                break;
+            case MfxAttributeType::Int:
+                array = vtkIntArray::New();
+                break;
+            case MfxAttributeType::UByte:
+                array = vtkUnsignedCharArray::New();
+                break;
+            default:
+                printf("MfxVTK error - unsupported datatype for attribute '%s' from input '%s'\n", requested_attribute.name, vtk_input.definition->name);
+                continue;
+        }
 
-            for (int i = 0; i < inputProps.vertexCount; i++) {
-                int p = *(int*)(vertPoint.data + i*vertPoint.stride);
-                float *values = (float*)(attr.data + i*attr.stride);
-                for (int j = 0; j < attr.componentCount; j++) {
-                    array->SetTypedComponent(p, j, values[j]);
+        array->SetNumberOfComponents(attr.componentCount);
+        array->SetName(requested_attribute.name);
+
+        switch (requested_attribute.attachment) {
+            case MfxAttributeAttachment::Point:
+                array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
+                vtk_input_polydata->GetPointData()->AddArray(array);
+                for (int i = 0; i < inputProps.pointCount; i++) {
+                    for (int j = 0; j < attr.componentCount; j++) {
+                        switch (attr.type) {
+                            case MfxAttributeType::Float: array->SetComponent(i, j, get_attribute_value<float>(attr, i, j)); break;
+                            case MfxAttributeType::Int: array->SetComponent(i, j, get_attribute_value<int>(attr, i, j)); break;
+                            case MfxAttributeType::UByte: array->SetComponent(i, j, get_attribute_value<unsigned char>(attr, i, j)); break;
+                        }
+                    }
                 }
-            }
-            printf("MfxVTK - read array %s\n", name);
+                break;
+
+            case MfxAttributeAttachment::Vertex:
+                array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
+                vtk_input_polydata->GetPointData()->AddArray(array);
+                for (int i = 0; i < inputProps.vertexCount; i++) {
+                    int p = get_attribute_value<int>(vertPoint, i, 0);
+                    for (int j = 0; j < attr.componentCount; j++) {
+                        switch (attr.type) {
+                            case MfxAttributeType::Float: array->SetComponent(p, j, get_attribute_value<float>(attr, i, j)); break;
+                            case MfxAttributeType::Int: array->SetComponent(p, j, get_attribute_value<int>(attr, i, j)); break;
+                            case MfxAttributeType::UByte: array->SetComponent(p, j, get_attribute_value<unsigned char>(attr, i, j)); break;
+                        }
+                    }
+                }
+                break;
+
+            default:
+                // TODO support Face, Mesh attributes
+                printf("MfxVTK error - unsupported attachment for attribute '%s' from input '%s'\n", requested_attribute.name, vtk_input.definition->name);
+                array->Delete();
+                continue;
         }
+
+        printf("MfxVTK - read array %s\n", requested_attribute.name);
     }
 
     return vtk_input_polydata;
 }
 
-vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata(MfxMesh &input_mesh) {
+void mfx_mesh_to_vtkpolydata(VtkEffectInput &vtk_input, MfxMesh &input_mesh) {
     MfxMeshProps inputProps;
     input_mesh.FetchProperties(inputProps);
 
     if (inputProps.noLooseEdge) {
-        return mfx_mesh_to_vtkpolydata_polys(input_mesh);
+        vtk_input.data = mfx_mesh_to_vtkpolydata_polys(vtk_input, input_mesh);
     } else {
-        return mfx_mesh_to_vtkpolydata_generic(input_mesh);
+        vtk_input.data = mfx_mesh_to_vtkpolydata_generic(vtk_input, input_mesh);
     }
 }
 
@@ -602,25 +639,25 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
     }
 }
 
-void vtkpolydata_to_mfx_mesh(MfxMesh &output_mesh, vtkPolyData *vtk_output_polydata) {
-    auto vtk_output_lines = vtk_output_polydata->GetLines();
-    auto vtk_output_polys = vtk_output_polydata->GetPolys();
+void vtkpolydata_to_mfx_mesh(VtkEffectInput &vtk_input, MfxMesh &output_mesh) {
+    auto vtk_output_lines = vtk_input.data->GetLines();
+    auto vtk_output_polys = vtk_input.data->GetPolys();
     bool has_lines = (vtk_output_lines == nullptr || vtk_output_lines->GetNumberOfCells() > 0);
     bool has_polylines = (has_lines && vtk_output_lines->GetMaxCellSize() > 2);
     bool has_polys = (vtk_output_polys == nullptr || vtk_output_polys->GetNumberOfCells() > 0);
 
     if (has_lines) {
         if (!has_polys && !has_polylines) {
-            vtkpolydata_to_mfx_mesh_wireframe(output_mesh, vtk_output_polydata);
+            vtkpolydata_to_mfx_mesh_wireframe(output_mesh, vtk_input.data);
         } else {
-            vtkpolydata_to_mfx_mesh_generic(output_mesh, vtk_output_polydata);
+            vtkpolydata_to_mfx_mesh_generic(output_mesh, vtk_input.data);
         }
     } else {
         // no lines
         if (has_polys) {
-            vtkpolydata_to_mfx_mesh_poly(output_mesh, vtk_output_polydata);
+            vtkpolydata_to_mfx_mesh_poly(output_mesh, vtk_input.data);
         } else {
-            vtkpolydata_to_mfx_mesh_pointcloud(output_mesh, vtk_output_polydata);
+            vtkpolydata_to_mfx_mesh_pointcloud(output_mesh, vtk_input.data);
         }
     }
 }

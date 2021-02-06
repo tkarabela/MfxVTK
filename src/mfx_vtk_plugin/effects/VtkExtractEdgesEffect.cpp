@@ -31,7 +31,7 @@ const char *VtkExtractEdgesEffect::GetName() {
 }
 
 OfxStatus
-VtkExtractEdgesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+VtkExtractEdgesEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_FEATURE_ANGLE, 30.0).Range(0, 180.0).Label("Feature angle");
     AddParam(PARAM_FEATURE_EDGES, true).Label("Extract feature edges");
     AddParam(PARAM_BOUNDARY_EDGES, false).Label("Extract boundary edges");
@@ -40,14 +40,14 @@ VtkExtractEdgesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &in
     return kOfxStatOK;
 }
 
-OfxStatus VtkExtractEdgesEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkExtractEdgesEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto feature_angle = GetParam<double>(PARAM_FEATURE_ANGLE).GetValue();
     auto extract_feature_edges = GetParam<bool>(PARAM_FEATURE_EDGES).GetValue();
     auto extract_boundary_edges = GetParam<bool>(PARAM_BOUNDARY_EDGES).GetValue();
     auto extract_nonmanifold_edges = GetParam<bool>(PARAM_NONMANIFOLD_EDGES).GetValue();
     auto extract_manifold_edges = GetParam<bool>(PARAM_MANIFOLD_EDGES).GetValue();
 
-    return vtkCook_inner(input_polydata, output_polydata, feature_angle, extract_feature_edges,
+    return vtkCook_inner(main_input.data, main_output.data, feature_angle, extract_feature_edges,
                          extract_boundary_edges, extract_nonmanifold_edges, extract_manifold_edges);
 }
 

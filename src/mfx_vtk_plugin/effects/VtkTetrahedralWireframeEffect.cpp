@@ -33,15 +33,15 @@ const char *VtkTetrahedralWireframeEffect::GetName() {
     return "Tetrahedral wireframe";
 }
 
-OfxStatus VtkTetrahedralWireframeEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
-                                                     MfxInputDef &output_mesh) {
+OfxStatus VtkTetrahedralWireframeEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh,
+                                                     VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_MAXIMUM_EDGE_LENGTH, 1.0).Range(0, 1e6).Label("Maximum edge length");
     return kOfxStatOK;
 }
 
-OfxStatus VtkTetrahedralWireframeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkTetrahedralWireframeEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto maximum_edge_length = GetParam<double>(PARAM_MAXIMUM_EDGE_LENGTH).GetValue();
-    return vtkCook_inner(input_polydata, output_polydata, maximum_edge_length);
+    return vtkCook_inner(main_input.data, main_output.data, maximum_edge_length);
 }
 
 OfxStatus VtkTetrahedralWireframeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,

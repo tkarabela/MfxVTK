@@ -55,7 +55,7 @@ public:
         return "Mask points";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override {
         AddParam(PARAM_RANDOM_MODE, true).Label("Use point selection");
         AddParam(PARAM_RANDOM_MODE_TYPE, 0).Range(0, 3).Label("Random distribution type"); // TODO replace this with enum
         AddParam(PARAM_ON_RATIO, 2).Label("Take every n-th point");
@@ -64,7 +64,7 @@ public:
         return kOfxStatOK;
     }
 
-    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
         auto use_random_mode = GetParam<bool>(PARAM_RANDOM_MODE).GetValue();
         auto random_mode_type = GetParam<int>(PARAM_RANDOM_MODE_TYPE).GetValue();
         auto on_ratio = GetParam<int>(PARAM_ON_RATIO).GetValue();
@@ -75,7 +75,7 @@ public:
         random_mode_type = std::max(0, std::min(3, random_mode_type));
 
         auto mask_points_filter = vtkSmartPointer<vtkMaskPoints>::New();
-        mask_points_filter->SetInputData(input_polydata);
+        mask_points_filter->SetInputData(main_input.data);
 
         mask_points_filter->SetRandomMode(use_random_mode);
         mask_points_filter->SetRandomModeType(random_mode_type);
@@ -86,7 +86,7 @@ public:
         mask_points_filter->Update();
 
         auto filter_output = mask_points_filter->GetOutput();
-        output_polydata->ShallowCopy(filter_output);
+        main_output.data->ShallowCopy(filter_output);
         return kOfxStatOK;
     }
 };
@@ -111,7 +111,7 @@ public:
         return "Decimate (pro)";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override {
         AddParam(PARAM_TARGET_REDUCTION, 0.8).Range(0, 1 - 1e-6).Label("Target reduction");
         AddParam(PARAM_PRESERVE_TOPOLOGY, false).Label("Preserve topology");
         AddParam(PARAM_FEATURE_ANGLE, 15.0).Range(0.001, 180.0).Label("Feature angle");
@@ -130,7 +130,7 @@ public:
         return !is_positive_double(target_reduction);
     }
 
-    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
         double target_reduction = GetParam<double>(PARAM_TARGET_REDUCTION).GetValue();
         bool preserve_topology = GetParam<bool>(PARAM_PRESERVE_TOPOLOGY).GetValue();
         double feature_angle = GetParam<double>(PARAM_FEATURE_ANGLE).GetValue();
@@ -144,7 +144,7 @@ public:
 
         // vtkTriangleFilter to ensure triangle mesh on input
         auto triangle_filter = vtkSmartPointer<vtkTriangleFilter>::New();
-        triangle_filter->SetInputData(input_polydata);
+        triangle_filter->SetInputData(main_input.data);
 
         // vtkDecimatePro for main processing
         auto decimate_filter = vtkSmartPointer<vtkDecimatePro>::New();
@@ -163,7 +163,7 @@ public:
         decimate_filter->Update();
 
         auto filter_output = decimate_filter->GetOutput();
-        output_polydata->ShallowCopy(filter_output);
+        main_output.data->ShallowCopy(filter_output);
         return kOfxStatOK;
     }
 };
@@ -191,7 +191,7 @@ public:
 //        return kOfxStatOK;
 //    }
 //
-//    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+//    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
 //        auto number_of_divisions = GetParam<std::array<int,3>>(PARAM_NUMBER_OF_DIVISIONS).GetValue();
 //        bool auto_adjust_number_of_divisions = GetParam<bool>(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS).GetValue();
 //        bool point_generation_mode = GetParam<int>(PARAM_POINT_GENERATION_MODE).GetValue();
@@ -228,7 +228,7 @@ public:
         return "Decimate (quadratic clustering)";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override {
         AddParam(PARAM_NUMBER_OF_DIVISIONS, std::array<int,3>{256, 256, 256})
             .Range({2, 2, 2}, {0xffff, 0xffff, 0xffff})
             .Label("Number of divisions");
@@ -236,19 +236,19 @@ public:
         return kOfxStatOK;
     }
 
-    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
         auto number_of_divisions = GetParam<std::array<int,3>>(PARAM_NUMBER_OF_DIVISIONS).GetValue();
         bool auto_adjust_number_of_divisions = GetParam<bool>(PARAM_AUTO_ADJUST_NUMBER_OF_DIVISIONS).GetValue();
 
         auto decimate_filter = vtkSmartPointer<vtkQuadricClustering>::New();
-        decimate_filter->SetInputData(input_polydata);
+        decimate_filter->SetInputData(main_input.data);
         decimate_filter->SetNumberOfDivisions(number_of_divisions[0], number_of_divisions[1], number_of_divisions[2]);
         decimate_filter->SetAutoAdjustNumberOfDivisions(auto_adjust_number_of_divisions);
 
         decimate_filter->Update();
 
         auto filter_output = decimate_filter->GetOutput();
-        output_polydata->ShallowCopy(filter_output);
+        main_output.data->ShallowCopy(filter_output);
         return kOfxStatOK;
     }
 };
@@ -263,7 +263,7 @@ public:
         return "Identity";
     }
 
-    OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) override {
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override {
         AddParam(PARAM_ACTION_IS_IDENTITY, false).Label("kOfxMeshEffectActionIsIdentity");
         return kOfxStatOK;
     }
@@ -273,8 +273,8 @@ public:
         return action_is_identity;
     }
 
-    OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) override {
-        output_polydata->ShallowCopy(input_polydata);
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
+        main_output.data->ShallowCopy(main_input.data);
         return kOfxStatOK;
     }
 };
@@ -348,6 +348,7 @@ static void transform_coordinates(double A[16], double xyz[3]) {
     }
 }
 
+#if 0
 class AppendInputEffect : public MfxEffect {
 public:
     const char *SECOND_INPUT_NAME = "SecondInput";
@@ -501,6 +502,7 @@ public:
         return kOfxStatOK;
     }
 };
+#endif
 
 // ----------------------------------------------------------------------------
 
@@ -559,6 +561,6 @@ MfxRegister(
 
     // these effects are interesting only for development of Open Mesh Effect
     VtkIdentityEffect,
-    IdentityForwardAttributesEffect,
-    AppendInputEffect
+    IdentityForwardAttributesEffect
+    //AppendInputEffect
 );

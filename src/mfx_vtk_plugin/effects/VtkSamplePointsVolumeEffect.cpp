@@ -35,8 +35,8 @@ const char *VtkSamplePointsVolumeEffect::GetName() {
     return "Sample points (volume)";
 }
 
-OfxStatus VtkSamplePointsVolumeEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh,
-                                                   MfxInputDef &output_mesh) {
+OfxStatus VtkSamplePointsVolumeEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh,
+                                                   VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_NUMBER_OF_POINTS, 200).Range(1, 1e6).Label("Number of points");
     AddParam(PARAM_DISTRIBUTE_UNIFORMLY, true).Label("Distribute points uniformly");
     AddParam(PARAM_AUTO_SIMPLIFY, true).Label("Auto simplify input mesh");
@@ -44,11 +44,11 @@ OfxStatus VtkSamplePointsVolumeEffect::vtkDescribe(OfxParamSetHandle parameters,
     return kOfxStatOK;
 }
 
-OfxStatus VtkSamplePointsVolumeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkSamplePointsVolumeEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto number_of_points = GetParam<int>(PARAM_NUMBER_OF_POINTS).GetValue();
     auto distribute_uniformly = GetParam<bool>(PARAM_DISTRIBUTE_UNIFORMLY).GetValue();
     auto auto_simplify = GetParam<bool>(PARAM_AUTO_SIMPLIFY).GetValue();
-    return vtkCook_inner(input_polydata, output_polydata, number_of_points, distribute_uniformly, auto_simplify);
+    return vtkCook_inner(main_input.data, main_output.data, number_of_points, distribute_uniformly, auto_simplify);
 }
 
 OfxStatus VtkSamplePointsVolumeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata,

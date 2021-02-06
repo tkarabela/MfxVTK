@@ -24,7 +24,10 @@ THE SOFTWARE.
 #pragma once
 
 #include <PluginSupport/MfxEffect>
-#include <vtkPolyData.h>
+#include "VtkEffectInput.h"
+#include "VtkEffectInputDef.h"
+#include <vector>
+#include <memory>
 
 class VtkEffect : public MfxEffect {
 protected:
@@ -32,7 +35,11 @@ protected:
     OfxStatus Cook(OfxMeshEffectHandle instance) override;
     OfxStatus IsIdentity(OfxMeshEffectHandle instance) override;
 
-    virtual OfxStatus vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) = 0;
-    virtual OfxStatus vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) = 0;
+    virtual OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) = 0;
+    virtual OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) = 0;
+    VtkEffectInputDef* vtkAddInput(const char *name, bool is_output=false);
     virtual bool vtkIsIdentity(OfxParamSetHandle parameters);
+
+    // this gets filled at Describe time and gets referenced at Cooking time
+    std::vector<std::unique_ptr<VtkEffectInputDef>> input_definitions;
 };

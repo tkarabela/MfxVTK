@@ -33,7 +33,7 @@ const char *VtkMakeTubesEffect::GetName() {
 }
 
 OfxStatus
-VtkMakeTubesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input_mesh, MfxInputDef &output_mesh) {
+VtkMakeTubesEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     AddParam(PARAM_RADIUS, 0.02).Range(1e-6, 1e6).Label("Radius");
     AddParam(PARAM_NUMBER_OF_SIDES, 6).Range(3, 1000).Label("Number of sides");
     AddParam(PARAM_CAPPING, true).Label("Cap ends");
@@ -42,12 +42,12 @@ VtkMakeTubesEffect::vtkDescribe(OfxParamSetHandle parameters, MfxInputDef &input
     return kOfxStatOK;
 }
 
-OfxStatus VtkMakeTubesEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkMakeTubesEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     double radius = GetParam<double>(PARAM_RADIUS).GetValue();
     int number_of_sides = GetParam<int>(PARAM_NUMBER_OF_SIDES).GetValue();
     bool capping = GetParam<bool>(PARAM_CAPPING).GetValue();
     // bool use_tube_bender = GetParam<bool>(PARAM_TUBE_BENDER).GetValue();
-    return vtkCook_inner(input_polydata, output_polydata, radius, number_of_sides, capping);
+    return vtkCook_inner(main_input.data, main_output.data, radius, number_of_sides, capping);
 }
 
 OfxStatus VtkMakeTubesEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double radius,
