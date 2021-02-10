@@ -30,6 +30,7 @@ set(SRC
         VtkEffect.h
         VtkEffectUtils.cpp
         VtkEffectUtils.h
+        VtkEffectInput.cpp
         VtkEffectInput.h
         VtkEffectInputDef.cpp
         VtkEffectInputDef.h

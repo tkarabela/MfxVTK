@@ -45,7 +45,7 @@ OfxStatus VtkEffect::Describe(OfxMeshEffectHandle descriptor) {
     for (auto &input_def : input_definitions) {
         auto native_input_def = AddInput(input_def->name);
 
-        if (!input_def->label) {
+        if (input_def->label) {
             native_input_def.Label(input_def->label);
         }
 
@@ -143,7 +143,9 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
 
     if (cook_status != kOfxStatOK) {
         for (auto &input_mesh : mfx_input_meshes_only) {
-            input_mesh.Release();
+            if (input_mesh.IsValid()) {
+                input_mesh.Release();
+            }
         }
       printf("==/ VtkEffect::Cook (failed)\n");
         return cook_status;
@@ -163,7 +165,7 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         t_vtk_epilogue += dt(t_vtk_start, t_vtk_end);
 
         // "release" the MFX mesh - this will convert output data to host
-        // note: avoid calling GetMesh() for output twice.  XXX what about inputs???
+        // note: avoid calling GetMesh() for output twice.
         t_mfx_start = std::chrono::system_clock::now();
         output_mesh.Release();
         t_mfx_end = std::chrono::system_clock::now();
@@ -177,7 +179,9 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
         // make sure not to call GetMesh() multiple times for given input mesh;
         // it triggers converting on MFX Blender host side again...
         // this is why we cache input MfxMeshes
-        input_mesh.Release();
+        if (input_mesh.IsValid()) {
+            input_mesh.Release();
+        }
     }
 
     auto t_mfx_end = std::chrono::system_clock::now();

@@ -32,6 +32,9 @@ THE SOFTWARE.
 #include <vtkQuadricClustering.h>
 #include <vtkMaskPoints.h>
 #include <vtkStaticCellLinks.h>
+#include <vtkTransform.h>
+#include <vtkTransformPolyDataFilter.h>
+#include <vtkAppendPolyData.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -504,6 +507,59 @@ public:
 };
 #endif
 
+class AppendInputEffect : public VtkEffect {
+public:
+    const char *SECOND_INPUT_NAME = "SecondInput";
+
+    const char* GetName() override {
+        return "Append input (second mesh)";
+    }
+
+    OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override {
+        auto second_mesh = vtkAddInput(SECOND_INPUT_NAME);
+        second_mesh->Label("Second input");
+        second_mesh->RequestTransform(true);
+        return kOfxStatOK;
+    }
+
+    OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
+        VtkEffectInput *second_input = nullptr;
+        for (auto &input : extra_inputs) {
+            if (strcmp(input.definition->name, SECOND_INPUT_NAME) == 0 && input.data) {
+                second_input = &input;
+            }
+        }
+
+        if (!second_input) {
+            printf("AppendInputEffect - missing second mesh input, bailing out\n");
+            main_output.data->ShallowCopy(main_input.data);
+            return kOfxStatFailed;
+        }
+
+        // transform second mesh to correct relative position in main_input coordinate system
+        auto transform = vtkSmartPointer<vtkTransform>::New();
+        auto transform_filter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+
+        transform_filter->SetInputData(second_input->data);
+        transform_filter->SetTransform(transform);
+
+        double m[16];
+        main_input.get_relative_transform(*second_input, m);
+        transform->SetMatrix(m);
+
+        // merge the two input meshes together
+        auto append_filter = vtkSmartPointer<vtkAppendPolyData>::New();
+        append_filter->AddInputData(main_input.data);
+        append_filter->AddInputConnection(transform_filter->GetOutputPort());
+        append_filter->Update();
+
+        auto filter_output = append_filter->GetOutput();
+        main_output.data->ShallowCopy(filter_output);
+
+        return kOfxStatOK;
+    }
+};
+
 // ----------------------------------------------------------------------------
 
 class IdentityForwardAttributesEffect : public MfxEffect {
@@ -561,6 +617,6 @@ MfxRegister(
 
     // these effects are interesting only for development of Open Mesh Effect
     VtkIdentityEffect,
-    IdentityForwardAttributesEffect
-    //AppendInputEffect
+    IdentityForwardAttributesEffect,
+    AppendInputEffect
 );

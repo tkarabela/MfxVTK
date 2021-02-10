@@ -338,10 +338,16 @@ static void vtkpolydata_to_mfx_mesh_pointcloud(MfxMesh &output_mesh, vtkPolyData
     int no_loose_edge = 1;
     int constant_face_count = 3; // dummy value
 
-    vtk_output_polydata->GetPoints()->SetDataTypeToFloat();
-    attrib_point_position_props.isOwner = false;
-    attrib_point_position_props.data = reinterpret_cast<char*>(vtk_output_polydata->GetPoints()->GetVoidPointer(0));
-    attrib_point_position_props.stride = 3*sizeof(float);
+    if (point_count > 0) {
+        vtk_output_polydata->GetPoints()->SetDataTypeToFloat();
+        attrib_point_position_props.isOwner = false;
+        attrib_point_position_props.data = reinterpret_cast<char*>(vtk_output_polydata->GetPoints()->GetVoidPointer(0));
+        attrib_point_position_props.stride = 3*sizeof(float);
+    } else {
+        // empty mesh
+        attrib_point_position_props.isOwner = false;
+        attrib_point_position_props.data = nullptr;
+    }
 
     attrib_vertex_point_props.isOwner = false;
     attrib_vertex_point_props.data = nullptr;
