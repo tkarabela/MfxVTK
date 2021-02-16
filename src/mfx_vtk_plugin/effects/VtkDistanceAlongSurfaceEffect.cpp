@@ -21,19 +21,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "VtkSurfaceDistanceEffect.h"
+#include "VtkDistanceAlongSurfaceEffect.h"
 #include <vtkPointData.h>
 #include <vtkDataArray.h>
 #include <vector>
 #include <vtkStaticCellLinks.h>
 #include <queue>
 
-const char *VtkSurfaceDistanceEffect::GetName() {
-    return "Surface distance";
+const char *VtkDistanceAlongSurfaceEffect::GetName() {
+    return "Distance along surface";
 }
 
 OfxStatus
-VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
+VtkDistanceAlongSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
     input_mesh.RequestVertexAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
 
     // TODO declare this is a deformer
@@ -42,7 +42,7 @@ VtkSurfaceDistanceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInp
     return kOfxStatOK;
 }
 
-OfxStatus VtkSurfaceDistanceEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
+OfxStatus VtkDistanceAlongSurfaceEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto input_color_arr = main_input.data->GetPointData()->GetArray("color0");
     auto normalize_distance = GetParam<bool>(PARAM_NORMALIZE_DISTANCE).GetValue();
 
@@ -105,9 +105,9 @@ OfxStatus VtkSurfaceDistanceEffect::vtkCook(VtkEffectInput &main_input, VtkEffec
     return kOfxStatOK;
 }
 
-vtkFloatArray *VtkSurfaceDistanceEffect::compute_distance(vtkPolyData *mesh, int num_source_points,
-                                                          const int *source_points,
-                                                          vtkStaticCellLinks *cell_links, float max_distance) {
+vtkFloatArray *VtkDistanceAlongSurfaceEffect::compute_distance(vtkPolyData *mesh, int num_source_points,
+                                                               const int *source_points,
+                                                               vtkStaticCellLinks *cell_links, float max_distance) {
     int n = mesh->GetNumberOfPoints();
 
     auto manifold_distance_arr = vtkFloatArray::New();

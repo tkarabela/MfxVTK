@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "effects/VtkTetrahedralWireframeEffect.h"
 #include "effects/VtkDecimateEffect.h"
 #include "effects/VtkSmoothEffect.h"
-#include "effects/VtkSurfaceDistanceEffect.h"
+#include "effects/VtkDistanceAlongSurfaceEffect.h"
 #include "effects/VtkPokeEffect.h"
 #include "effects/VtkFillHolesEffect.h"
 
@@ -43,7 +43,7 @@ MfxRegister(
         VtkTetrahedralWireframeEffect,
         VtkDecimateEffect,
         VtkSmoothEffect,
-        VtkSurfaceDistanceEffect,
+        VtkDistanceAlongSurfaceEffect,
         VtkPokeEffect,
         VtkFillHolesEffect
 );

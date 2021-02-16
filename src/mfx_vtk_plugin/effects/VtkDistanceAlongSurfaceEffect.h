@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include <vtkStaticCellLinks.h>
 #include "VtkEffect.h"
 
-class VtkSurfaceDistanceEffect : public VtkEffect {
+class VtkDistanceAlongSurfaceEffect : public VtkEffect {
 private:
     const char *PARAM_NORMALIZE_DISTANCE = "NormalizeDistance";
 public:

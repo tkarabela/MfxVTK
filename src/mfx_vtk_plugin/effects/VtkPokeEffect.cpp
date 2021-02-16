@@ -23,7 +23,7 @@ THE SOFTWARE.
 
 #include "VtkPokeEffect.h"
 #include "mfx_vtk_utils.h"
-#include "VtkSurfaceDistanceEffect.h"
+#include "VtkDistanceAlongSurfaceEffect.h"
 #include <chrono>
 #include <vtkPointData.h>
 #include <vtkCellData.h>
@@ -42,7 +42,9 @@ const char *VtkPokeEffect::GetName() {
     return "Poke";
 }
 
-OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters) {
+OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
+    input_mesh.RequestVertexAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
+
     // TODO support collision with other mesh
     // AddInput("Collider");
 
@@ -59,7 +61,7 @@ OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters) {
     return kOfxStatOK;
 }
 
-OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *output_polydata) {
+OfxStatus VtkPokeEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) {
     auto max_distance = GetParam<double>(PARAM_MAX_DISTANCE).GetValue();
     auto falloff_radius = GetParam<double>(PARAM_FALLOFF_RADIUS).GetValue();
     auto falloff_exponent = GetParam<double>(PARAM_FALLOFF_EXPONENT).GetValue();
@@ -69,14 +71,14 @@ OfxStatus VtkPokeEffect::vtkCook(vtkPolyData *input_polydata, vtkPolyData *outpu
     auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
     auto debug = GetParam<bool>(PARAM_DEBUG).GetValue();
 
-    if (!input_polydata->GetPointData()->HasArray("color0")) {
+    if (!main_input.data->GetPointData()->HasArray("color0")) {
         printf("VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
         return kOfxStatFailed;
     }
 
     // XXX NOTE TO USER - paint mesh white and collider black...
 
-    vtkCook_inner(input_polydata, output_polydata, max_distance, falloff_radius, falloff_exponent,
+    vtkCook_inner(main_input.data, main_output.data, max_distance, falloff_radius, falloff_exponent,
                   collision_smoothing_ratio, offset, number_of_iterations, debug, collider_normal_factor);
 
     return kOfxStatOK;
@@ -385,9 +387,9 @@ void VtkPokeEffect::handle_reaction_laplacian(vtkPolyData *mesh_polydata, const 
     auto cell_links = vtkSmartPointer<vtkStaticCellLinks>::New(); // TODO use templated class to get int32 here
     cell_links->BuildLinks(mesh_polydata);
 
-    auto manifold_distance_arr = VtkSurfaceDistanceEffect::compute_distance(mesh_polydata, collision_points.size(),
-                                                                            collision_points.data(), cell_links,
-                                                                            (float) falloff_radius);
+    auto manifold_distance_arr = VtkDistanceAlongSurfaceEffect::compute_distance(mesh_polydata, collision_points.size(),
+                                                                                 collision_points.data(), cell_links,
+                                                                                 (float) falloff_radius);
 
     auto tmp_id_list = vtkSmartPointer<vtkIdList>::New(); // TODO get rid of this, prevents parallelization
     auto push_point_neighbors = [&mesh_polydata, &cell_links, &tmp_id_list](int u, std::vector<int> &connectivity) -> int {
