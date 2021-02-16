@@ -1,5 +1,5 @@
-Surface Distance
-****************
+Distance Along Surface
+**********************
 
 This effect computes shortest distance along surface to given area(s) on the mesh.
 You can imagine this as heating some part of the mesh to glowing red temperature,
@@ -55,5 +55,5 @@ Example
 
     Left: Stanford bunny with input color attribute (source vertices are white,
     rest of the mesh is black).
-    Right: Stanford bunny shaded with U component from *Surface distance* UV map
+    Right: Stanford bunny shaded with U component from *Distance Along Surface* UV map
     (red is 0.0, blue is 1.0).

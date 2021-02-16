@@ -45,6 +45,7 @@ that make sense.
 
    effects/smooth
    effects/decimate
+   effects/poke
    effects/surface-distance
    effects/fill-holes
 
