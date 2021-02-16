@@ -523,12 +523,7 @@ public:
     }
 
     OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override {
-        VtkEffectInput *second_input = nullptr;
-        for (auto &input : extra_inputs) {
-            if (strcmp(input.definition->name, SECOND_INPUT_NAME) == 0 && input.data) {
-                second_input = &input;
-            }
-        }
+        VtkEffectInput *second_input = vtkFindInput(extra_inputs, SECOND_INPUT_NAME);
 
         if (!second_input) {
             printf("AppendInputEffect - missing second mesh input, bailing out\n");

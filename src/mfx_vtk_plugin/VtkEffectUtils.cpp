@@ -247,6 +247,11 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
         MfxAttributeProps attr;
         input_mesh.GetAttribute(requested_attribute.attachment, requested_attribute.name).FetchProperties(attr);
 
+        if (!attr.data) {
+          printf("MfxVTK warning - attribute '%s' from input '%s' has NULL data\n", requested_attribute.name, vtk_input.definition->name);
+          continue;
+        }
+
         vtkDataArray* array = nullptr;
 
         switch (attr.type) {

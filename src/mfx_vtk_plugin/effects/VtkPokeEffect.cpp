@@ -37,18 +37,20 @@ THE SOFTWARE.
 #include <vtkStaticCellLinks.h>
 #include <vtkWarpVector.h>
 #include <vtkXMLPolyDataWriter.h>
+#include <vtkTransform.h>
+#include <vtkTransformPolyDataFilter.h>
 
 const char *VtkPokeEffect::GetName() {
     return "Poke";
 }
 
 OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
-    input_mesh.RequestVertexAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
+    input_mesh.RequestVertexAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
+    input_mesh.RequestTransform(true);
 
-    // TODO support collision with other mesh
-    // AddInput("Collider");
-
-    // TODO support specifying attribute for using main mesh as collider
+    auto collider_mesh = vtkAddInput(INPUT_COLLIDER);
+    collider_mesh->RequestTransform(true);
+    collider_mesh->RequestVertexAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
 
     AddParam(PARAM_MAX_DISTANCE, 0.0).Range(0.0, 1e6).Label("Maximum distance");
     AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");
@@ -71,50 +73,52 @@ OfxStatus VtkPokeEffect::vtkCook(VtkEffectInput &main_input, VtkEffectInput &mai
     auto offset = GetParam<double>(PARAM_OFFSET).GetValue();
     auto debug = GetParam<bool>(PARAM_DEBUG).GetValue();
 
-    if (!main_input.data->GetPointData()->HasArray("color0")) {
-        printf("VtkPokeEffect - error, input must have vertex color attribute called 'color0'\n");
-        return kOfxStatFailed;
+    VtkEffectInput *collider_input = vtkFindInput(extra_inputs, INPUT_COLLIDER);
+    double input_collider_transform[16];
+
+    if (collider_input) {
+        main_input.get_relative_transform(*collider_input, input_collider_transform);
     }
 
     // XXX NOTE TO USER - paint mesh white and collider black...
 
-    vtkCook_inner(main_input.data, main_output.data, max_distance, falloff_radius, falloff_exponent,
-                  collision_smoothing_ratio, offset, number_of_iterations, debug, collider_normal_factor);
-
-    return kOfxStatOK;
+    return vtkCook_inner(main_input.data, (collider_input) ? collider_input->data : nullptr, main_output.data,
+                         ATTRIBUTE_COLOR, input_collider_transform, max_distance, falloff_radius, falloff_exponent,
+                         collision_smoothing_ratio, offset, number_of_iterations, debug, collider_normal_factor);
 }
 
-OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance,
-                                       double falloff_radius,
-                                       double falloff_exponent, double collision_smoothing_ratio, double offset,
-                                       int number_of_iterations,
-                                       bool debug, double collider_normal_factor) {
-    auto t0 = std::chrono::system_clock::now();
+static const char *POINT_ID_ARRAY_NAME = "_PointId";
+const int THRESHOLD_VALUE_COLLIDER = 0;
+const int THRESHOLD_VALUE_MESH = 255;
 
-    // remember point IDs so that we can map deformed mesh onto input_polydata
-    // TODO even better would be to keep input vtkPoints as much as possible
-    const char *point_id_array_name = "_PointId";
+static void compute_point_ids(vtkPolyData* input_polydata, vtkPolyData* output_polydata) {
     auto id_filter = vtkSmartPointer<vtkIdFilter>::New();
     id_filter->SetInputData(input_polydata);
     id_filter->SetPointIds(true);
-    id_filter->SetPointIdsArrayName(point_id_array_name);
+    id_filter->SetPointIdsArrayName(POINT_ID_ARRAY_NAME);
     id_filter->SetCellIds(false);
+    id_filter->Update();
+    output_polydata->ShallowCopy(id_filter->GetOutput());
+}
 
-    // get normals
-    // TODO read normals from input instead of recalculating (but make sure we have cell normals in collider)
+static void compute_normals(vtkPolyData* input_polydata, vtkPolyData* output_polydata, bool point_normals, bool cell_normals) {
     auto normals_filter = vtkSmartPointer<vtkPolyDataNormals>::New();
-    normals_filter->SetInputConnection(id_filter->GetOutputPort());
+    normals_filter->SetInputData(input_polydata);
     normals_filter->SetSplitting(false);
     normals_filter->SetNonManifoldTraversal(true);
-    normals_filter->SetComputePointNormals(true);
-    normals_filter->SetComputeCellNormals(true); // for collider
+    normals_filter->SetComputePointNormals(point_normals);
+    normals_filter->SetComputeCellNormals(cell_normals);
     normals_filter->SetAutoOrientNormals(true);
+    normals_filter->Update();
+    output_polydata->ShallowCopy(normals_filter->GetOutput());
+}
 
+static void scalar_threshold(vtkPolyData* input_polydata, vtkPolyData* output_polydata, const char *point_array_name, int value) {
     // separate input into collider part and mesh part
     auto threshold_filter = vtkSmartPointer<vtkThreshold>::New();
-    threshold_filter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "color0");
-    threshold_filter->ThresholdBetween(255, 255);
-    threshold_filter->SetInputConnection(normals_filter->GetOutputPort());
+    threshold_filter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, point_array_name);
+    threshold_filter->ThresholdBetween(value, value);
+    threshold_filter->SetInputData(input_polydata);
 
     // vtkThreshold outputs unstructured grid, get vtkPolyData again
     auto geometry_filter = vtkSmartPointer<vtkGeometryFilter>::New();
@@ -122,19 +126,88 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
     geometry_filter->SetMerging(false);
     geometry_filter->Update();
 
-    auto mesh_polydata = vtkSmartPointer<vtkPolyData>::New();
-    mesh_polydata->ShallowCopy(geometry_filter->GetOutput());
+    output_polydata->ShallowCopy(geometry_filter->GetOutput());
+}
 
-    threshold_filter->ThresholdBetween(0, 0);
-    threshold_filter->Update();
-    geometry_filter->Update();
+static void transform_polydata(vtkPolyData *input_polydata, vtkPolyData* output_polydata, const double m[16]) {
+    auto transform = vtkSmartPointer<vtkTransform>::New();
+    auto transform_filter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+
+    transform_filter->SetInputData(input_polydata);
+    transform_filter->SetTransform(transform);
+
+    transform->SetMatrix(m);
+    transform_filter->Update();
+    output_polydata->ShallowCopy(transform_filter->GetOutput());
+}
+
+OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata,
+                                       vtkPolyData *input_collider_polydata,
+                                       vtkPolyData *output_polydata,
+                                       const char* color_attribute_name,
+                                       const double input_collider_transform[16],
+                                       double max_distance,
+                                       double falloff_radius,
+                                       double falloff_exponent, double collision_smoothing_ratio, double offset,
+                                       int number_of_iterations,
+                                       bool debug, double collider_normal_factor) {
+    auto t0 = std::chrono::system_clock::now();
+
+    auto mesh_polydata = vtkSmartPointer<vtkPolyData>::New();
     auto collider_polydata = vtkSmartPointer<vtkPolyData>::New();
-    collider_polydata->ShallowCopy(geometry_filter->GetOutput());
+
+    // remember point IDs so that we can map deformed mesh onto input_polydata
+    compute_point_ids(input_polydata, mesh_polydata);
+
+    if (input_collider_polydata) {
+        // mesh = WHITE part of input_polydata (or all input_polydata if no color array)
+        // collider = BLACK part of input_collider_polydata (or all input_collider_polydata if no color array)
+        compute_normals(mesh_polydata, mesh_polydata, true, false);
+        if (mesh_polydata->GetPointData()->HasArray(color_attribute_name)) {
+            printf("VtkPokeEffect - using mesh from main input (%s = %d)\n", color_attribute_name, THRESHOLD_VALUE_MESH);
+            scalar_threshold(mesh_polydata, mesh_polydata, color_attribute_name, THRESHOLD_VALUE_MESH);
+        } else {
+            printf("VtkPokeEffect - using mesh from main input (all)\n");
+        }
+
+        transform_polydata(input_collider_polydata, collider_polydata, input_collider_transform);
+        compute_normals(collider_polydata, collider_polydata, true, true);
+        if (collider_polydata->GetPointData()->HasArray(color_attribute_name)) {
+            printf("VtkPokeEffect - using collider from collider input (%s = %d)\n", color_attribute_name, THRESHOLD_VALUE_COLLIDER);
+            scalar_threshold(collider_polydata, collider_polydata, color_attribute_name, THRESHOLD_VALUE_COLLIDER);
+        }else {
+            printf("VtkPokeEffect - using collider from collider input (all)\n");
+        }
+    } else {
+        // mesh = WHITE part of input_polydata
+        // collider = BLACK part of input_polydata
+        if (!input_polydata->GetPointData()->HasArray(color_attribute_name)) {
+            printf("VtkPokeEffect - missing attribute %s, error\n", color_attribute_name);
+            return kOfxStatFailed;
+        }
+
+        compute_normals(mesh_polydata, mesh_polydata, true, true);
+
+        printf("VtkPokeEffect - using collider from main input (%s = %d)\n", color_attribute_name, THRESHOLD_VALUE_COLLIDER);
+        printf("VtkPokeEffect - using mesh from main input (%s = %d)\n", color_attribute_name, THRESHOLD_VALUE_MESH);
+        scalar_threshold(mesh_polydata, collider_polydata, color_attribute_name, THRESHOLD_VALUE_COLLIDER);
+        scalar_threshold(mesh_polydata, mesh_polydata, color_attribute_name, THRESHOLD_VALUE_MESH);
+    }
+
+    if (mesh_polydata->GetNumberOfCells() == 0) {
+        printf("VtkPokeEffect - early termination, no mesh\n");
+        output_polydata->ShallowCopy(input_polydata);
+        return kOfxStatOK;
+    } else if (collider_polydata->GetNumberOfCells() == 0) {
+        printf("VtkPokeEffect - early termination, no collider\n");
+        output_polydata->ShallowCopy(input_polydata);
+        return kOfxStatOK;
+    }
 
     auto t1 = std::chrono::system_clock::now();
 
     // do the deformation
-    printf("\n\ttotal elements: %d  collider: %d   mesh: %d\n", input_polydata->GetNumberOfCells(), collider_polydata->GetNumberOfCells(), mesh_polydata->GetNumberOfCells());
+    printf("VtkPokeEffect - collider elements: %d   mesh elements: %d\n", (int)collider_polydata->GetNumberOfCells(), (int)mesh_polydata->GetNumberOfCells());
 
     // TODO crop mesh_polydata by collider bounding geometry, to reduce cost?
     if (!is_positive_double(max_distance)) {
@@ -152,7 +225,7 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
     output_polydata->ShallowCopy(input_polydata);
     output_polydata->GetPoints()->DeepCopy(input_polydata->GetPoints()); // maybe skip if we're okay changing input in place
 
-    auto mesh_id_array = mesh_polydata->GetPointData()->GetArray(point_id_array_name);
+    auto mesh_id_array = mesh_polydata->GetPointData()->GetArray(POINT_ID_ARRAY_NAME);
     auto mesh_points = mesh_polydata->GetPoints();
     auto output_points = output_polydata->GetPoints();
     // TODO parallelize this
@@ -169,7 +242,7 @@ OfxStatus VtkPokeEffect::vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData 
         return std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
     };
 
-    printf("\n\tVtkPokeEffect timings [ms] dt1=%d, dt2(collision)=%d, dt3(reaction)=%d, dt4=%d\n",
+    printf("VtkPokeEffect - timings [ms] dt1=%d, dt2(collision)=%d, dt3(reaction)=%d, dt4=%d\n",
            dt(t0, t1), dt(t1, t2), dt(t2, t3), dt(t3, t4));
 
     return kOfxStatOK;
@@ -430,7 +503,7 @@ void VtkPokeEffect::handle_reaction_laplacian(vtkPolyData *mesh_polydata, const 
         }
     }
     smoothed_points_offsets.push_back(previous_offset);
-    printf("VtkPokeEffect - picked %d points for smoothing\n", smoothed_points.size());
+    printf("VtkPokeEffect - picked %d points for smoothing\n", (int)smoothed_points.size());
 
     // iterate laplacian
     for (int i = 0; i < number_of_iterations; i++) {

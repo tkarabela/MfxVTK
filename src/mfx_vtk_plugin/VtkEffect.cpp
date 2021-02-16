@@ -221,3 +221,15 @@ VtkEffectInputDef* VtkEffect::vtkAddInput(const char *name, bool is_output) {
     input_definitions.emplace_back(ptr);
     return ptr;
 }
+
+VtkEffectInput *VtkEffect::vtkFindInput(std::vector<VtkEffectInput> &extra_inputs, const char *name) {
+    VtkEffectInput *input_ptr = nullptr;
+
+    for (int i = 0; i < extra_inputs.size(); i++) {
+        if (strcmp(extra_inputs[i].definition->name, name) == 0 && extra_inputs[i].data) {
+            input_ptr = &extra_inputs[i];
+        }
+    }
+
+    return input_ptr;
+}

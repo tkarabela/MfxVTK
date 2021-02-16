@@ -66,7 +66,7 @@ OfxStatus VtkDistanceAlongSurfaceEffect::vtkCook(VtkEffectInput &main_input, Vtk
     if (source_points.empty()) {
         printf("VtkSurfaceDistanceEffect - warning, no source points!\n");
     } else {
-        printf("VtkSurfaceDistanceEffect - I have %d source points\n", source_points.size());
+        printf("VtkSurfaceDistanceEffect - I have %d source points\n", (int)source_points.size());
     }
 
     auto cell_links = vtkSmartPointer<vtkStaticCellLinks>::New(); // TODO use templated class to get int32 here

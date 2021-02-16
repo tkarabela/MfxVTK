@@ -40,6 +40,8 @@ protected:
     VtkEffectInputDef* vtkAddInput(const char *name, bool is_output=false);
     virtual bool vtkIsIdentity(OfxParamSetHandle parameters);
 
+    static VtkEffectInput* vtkFindInput(std::vector<VtkEffectInput> &extra_inputs, const char *name);
+
     // this gets filled at Describe time and gets referenced at Cooking time
     std::vector<std::unique_ptr<VtkEffectInputDef>> input_definitions;
 };

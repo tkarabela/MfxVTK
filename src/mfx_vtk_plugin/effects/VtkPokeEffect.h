@@ -36,6 +36,10 @@ private:
     const char *PARAM_OFFSET = "Offset";
     const char *PARAM_DEBUG = "Debug";
 
+    const char *INPUT_COLLIDER = "Collider";
+
+    const char *ATTRIBUTE_COLOR = "color0";
+
 public:
     struct Contact { int pid; float dx, dy, dz; };
 
@@ -43,7 +47,8 @@ public:
     OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override;
     OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override;
     static OfxStatus
-    vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *output_polydata, double max_distance, double falloff_radius,
+    vtkCook_inner(vtkPolyData *input_polydata, vtkPolyData *input_collider_polydata, vtkPolyData *output_polydata,
+                  const char* color_attribute_name, const double input_collider_transform[16], double max_distance, double falloff_radius,
                   double falloff_exponent, double collision_smoothing_ratio, double offset, int number_of_iterations,
                   bool debug, double collider_normal_factor);
 
