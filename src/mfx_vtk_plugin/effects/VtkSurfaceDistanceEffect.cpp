@@ -69,7 +69,10 @@ OfxStatus VtkSurfaceDistanceEffect::vtkCook(VtkEffectInput &main_input, VtkEffec
         printf("VtkSurfaceDistanceEffect - I have %d source points\n", source_points.size());
     }
 
-    auto distance_arr = compute_distance(main_input.data, source_points.size(), source_points.data());
+    auto cell_links = vtkSmartPointer<vtkStaticCellLinks>::New(); // TODO use templated class to get int32 here
+    cell_links->BuildLinks(main_input.data);
+
+    auto distance_arr = compute_distance(main_input.data, source_points.size(), source_points.data(), cell_links);
 
     auto output_uv_arr = vtkFloatArray::New();
     output_uv_arr->SetNumberOfComponents(2);
@@ -102,11 +105,10 @@ OfxStatus VtkSurfaceDistanceEffect::vtkCook(VtkEffectInput &main_input, VtkEffec
     return kOfxStatOK;
 }
 
-vtkFloatArray *VtkSurfaceDistanceEffect::compute_distance(vtkPolyData *mesh, int num_source_points, const int *source_points) {
+vtkFloatArray *VtkSurfaceDistanceEffect::compute_distance(vtkPolyData *mesh, int num_source_points,
+                                                          const int *source_points,
+                                                          vtkStaticCellLinks *cell_links, float max_distance) {
     int n = mesh->GetNumberOfPoints();
-
-    auto cell_links = vtkSmartPointer<vtkStaticCellLinks>::New(); // TODO use templated class to get int32 here
-    cell_links->BuildLinks(mesh);
 
     auto manifold_distance_arr = vtkFloatArray::New();
     manifold_distance_arr->SetNumberOfComponents(1);
@@ -144,6 +146,11 @@ vtkFloatArray *VtkSurfaceDistanceEffect::compute_distance(vtkPolyData *mesh, int
         std::tie(u_dist, u) = queue.top();
         queue.pop();
         it++;
+
+        if (u_dist > max_distance) {
+            // early exit, we've computed all closest paths up to max_distance
+            break;
+        }
 
         Status u_status = status_arr[u];
         float u_distance = manifold_distance_arr->GetValue(u);

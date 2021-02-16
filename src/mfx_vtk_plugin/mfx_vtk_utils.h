@@ -26,13 +26,45 @@ THE SOFTWARE.
 #include <cmath>
 #include <array>
 
-static inline bool is_positive_double(double x) {
+static inline constexpr bool is_positive_double(double x) {
     return x >= DBL_EPSILON;
 }
 
 template <typename T>
-static inline T clamp(T value, T minimum, T maximum) {
+static inline constexpr T clamp(T value, T minimum, T maximum) {
     return std::min(maximum, std::max(minimum, value));
+}
+
+template <typename T>
+static inline constexpr T vec3_squared_distance(const T x[3], const T y[3]) {
+    T acc = 0;
+    for (int i = 0; i < 3; i++) {
+        acc += (x[i]-y[i]) * (x[i]-y[i]);
+    }
+    return acc;
+}
+
+template <typename T>
+static inline constexpr T vec3_dot(const T x[3], const T y[3]) {
+    T acc = 0;
+    for (int i = 0; i < 3; i++) {
+        acc += x[i]*y[i];
+    }
+    return acc;
+}
+
+template <typename T>
+static inline constexpr void vec3_min(T x[3], const T y[3]) {
+    for (int i = 0; i < 3; i++) {
+        x[i] = std::min(x[i], y[i]);
+    }
+}
+
+template <typename T>
+static inline constexpr void vec3_max(T x[3], const T y[3]) {
+    for (int i = 0; i < 3; i++) {
+        x[i] = std::max(x[i], y[i]);
+    }
 }
 
 // TODO improve, it's a bit too much dependent

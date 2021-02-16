@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "effects/VtkDecimateEffect.h"
 #include "effects/VtkSmoothEffect.h"
 #include "effects/VtkSurfaceDistanceEffect.h"
+#include "effects/VtkPokeEffect.h"
 #include "effects/VtkFillHolesEffect.h"
 
 MfxRegister(
@@ -43,5 +44,6 @@ MfxRegister(
         VtkDecimateEffect,
         VtkSmoothEffect,
         VtkSurfaceDistanceEffect,
+        VtkPokeEffect,
         VtkFillHolesEffect
 );

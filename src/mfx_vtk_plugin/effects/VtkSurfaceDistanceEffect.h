@@ -24,6 +24,7 @@ THE SOFTWARE.
 #pragma once
 
 #include <vtkFloatArray.h>
+#include <vtkStaticCellLinks.h>
 #include "VtkEffect.h"
 
 class VtkSurfaceDistanceEffect : public VtkEffect {
@@ -33,5 +34,5 @@ public:
     const char* GetName() override;
     OfxStatus vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) override;
     OfxStatus vtkCook(VtkEffectInput &main_input, VtkEffectInput &main_output, std::vector<VtkEffectInput> &extra_inputs) override;
-    static vtkFloatArray* compute_distance(vtkPolyData *input_polydata, int num_source_points, const int *source_points);
+    static vtkFloatArray *compute_distance(vtkPolyData *mesh, int num_source_points, const int *source_points, vtkStaticCellLinks *cell_links, float max_distance=FLT_MAX);
 };
