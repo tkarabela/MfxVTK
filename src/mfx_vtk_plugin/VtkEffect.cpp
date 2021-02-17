@@ -147,7 +147,7 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
                 input_mesh.Release();
             }
         }
-      printf("==/ VtkEffect::Cook (failed)\n");
+        printf("==/ VtkEffect::Cook (failed)\n");
         return cook_status;
     }
 
@@ -155,7 +155,19 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
     // TODO support multiple output meshes, if it's ever relevant
     {
         auto t_mfx_start = std::chrono::system_clock::now();
-        MfxMesh output_mesh = GetInput(kOfxMeshMainOutput).GetMesh();
+        auto output_input = GetInput(kOfxMeshMainOutput);
+        MfxMesh output_mesh = output_input.GetMesh();
+
+        if (!output_mesh.IsValid()) {
+            printf("VtkEffect::Cook - GetInput(kOfxMeshMainOutput).GetMesh() returned NULL mesh, this is host error\n");
+            for (auto &input_mesh : mfx_input_meshes_only) {
+                if (input_mesh.IsValid()) {
+                    input_mesh.Release();
+                }
+            }
+            printf("==/ VtkEffect::Cook (failed)\n");
+            return kOfxStatFailed;
+        }
         auto t_mfx_end = std::chrono::system_clock::now();
         t_mfx_epilogue += dt(t_mfx_start, t_mfx_end);
 
