@@ -43,6 +43,12 @@ set(LIB
   OpenMeshEffect::Sdk
 )
 
+# Enable C++20 (required to use designated initializers)
+set(CMAKE_CXX_STANDARD 20)
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest")
+endif(MSVC)
+
 # VTK dependency, part 1
 find_package(VTK COMPONENTS
         vtkCommonCore
