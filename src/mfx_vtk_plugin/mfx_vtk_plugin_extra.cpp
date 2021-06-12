@@ -578,22 +578,22 @@ public:
         output_mesh.FetchProperties(output_mesh_properties);
 
         MfxAttribute input_pointPos = input_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
-        MfxAttribute input_vertPoint = input_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
-        MfxAttribute input_faceLen = input_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+        MfxAttribute input_vertPoint = input_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint);
+        MfxAttribute input_faceLen = input_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize);
 
         MfxAttribute output_pointPos = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
-        MfxAttribute output_vertPoint = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
-        MfxAttribute output_faceLen = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+        MfxAttribute output_vertPoint = output_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint);
+        MfxAttribute output_faceLen = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize);
 
         output_pointPos.ForwardFrom(input_pointPos);
         output_vertPoint.ForwardFrom(input_vertPoint);
         output_faceLen.ForwardFrom(input_faceLen);
 
         output_mesh.Allocate(input_mesh_properties.pointCount,
-                             input_mesh_properties.vertexCount,
+                             input_mesh_properties.cornerCount,
                              input_mesh_properties.faceCount,
                              input_mesh_properties.noLooseEdge,
-                             input_mesh_properties.constantFaceCount);
+                             input_mesh_properties.constantFaceSize);
 
         output_mesh.Release();
         input_mesh.Release();

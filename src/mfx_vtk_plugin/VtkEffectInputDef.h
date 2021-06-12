@@ -26,7 +26,7 @@ struct VtkEffectInputDef {
     VtkEffectInputDef & Label(const char *label);
     VtkEffectInputDef & RequestAttribute(MfxAttributeAttachment attachment, const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
     VtkEffectInputDef & RequestPointAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
-    VtkEffectInputDef & RequestVertexAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
+    VtkEffectInputDef & RequestCornerAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
     VtkEffectInputDef & RequestFaceAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
     VtkEffectInputDef & RequestMeshAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory);
     VtkEffectInputDef & RequestGeometry(bool request);

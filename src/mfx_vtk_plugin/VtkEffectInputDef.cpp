@@ -28,8 +28,8 @@ VtkEffectInputDef & VtkEffectInputDef::RequestPointAttribute(const char* name, i
     return RequestAttribute(MfxAttributeAttachment::Point, name, componentCount, type, semantic, mandatory);
 }
 
-VtkEffectInputDef & VtkEffectInputDef::RequestVertexAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory) {
-    return RequestAttribute(MfxAttributeAttachment::Vertex, name, componentCount, type, semantic, mandatory);
+VtkEffectInputDef & VtkEffectInputDef::RequestCornerAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory) {
+    return RequestAttribute(MfxAttributeAttachment::Corner, name, componentCount, type, semantic, mandatory);
 }
 
 VtkEffectInputDef & VtkEffectInputDef::RequestFaceAttribute(const char* name, int componentCount, MfxAttributeType type, MfxAttributeSemantic semantic, bool mandatory) {

@@ -37,10 +37,10 @@ set(SRC
         mfx_vtk_utils.h
         ${SRC_EFFECTS})
 
-# OpenMeshEffect dependency
+# OpenMfx dependency
 set(LIB
-  OpenMeshEffect::Core
-  OpenMeshEffect::Sdk
+  OpenMfx::Core
+  OpenMfx::Sdk
 )
 
 # Enable C++20 (required to use designated initializers)
