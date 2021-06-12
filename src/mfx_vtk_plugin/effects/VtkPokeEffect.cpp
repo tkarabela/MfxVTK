@@ -45,12 +45,12 @@ const char *VtkPokeEffect::GetName() {
 }
 
 OfxStatus VtkPokeEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
-    input_mesh.RequestVertexAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
+    input_mesh.RequestCornerAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
     input_mesh.RequestTransform(true);
 
     auto collider_mesh = vtkAddInput(INPUT_COLLIDER);
     collider_mesh->RequestTransform(true);
-    collider_mesh->RequestVertexAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
+    collider_mesh->RequestCornerAttribute(ATTRIBUTE_COLOR, 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, false);
 
     AddParam(PARAM_MAX_DISTANCE, 0.0).Range(0.0, 1e6).Label("Maximum distance");
     AddParam(PARAM_FALLOFF_RADIUS, 0.01).Range(0.0, 1e6).Label("Falloff radius");

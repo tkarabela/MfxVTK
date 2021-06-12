@@ -85,11 +85,11 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_generic(const VtkEffectInpu
 
     MfxAttributeProps pointPos, vertPoint, faceLen;
     input_mesh.GetPointAttribute(kOfxMeshAttribPointPosition).FetchProperties(pointPos);
-    input_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
-    input_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
+    input_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint).FetchProperties(vertPoint);
+    input_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize).FetchProperties(faceLen);
 
     printf("MFX input has %d points, %d vertices, %d faces\n",
-           inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
+           inputProps.pointCount, inputProps.cornerCount, inputProps.faceCount);
 
     // ------------------------------------------------------------------------
     // Create vtkPolyData from MFX mesh
@@ -120,9 +120,9 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_generic(const VtkEffectInpu
     int loose_edge_count = 0;
     int vertex_idx = 0;
     for (int face_idx = 0; face_idx < inputProps.faceCount; face_idx++) {
-        int vertcount = (-1 == inputProps.constantFaceCount) ?
+        int vertcount = (-1 == inputProps.constantFaceSize) ?
                         (*(int *) (faceLen.data + face_idx * faceLen.stride)) :
-                        inputProps.constantFaceCount;
+                        inputProps.constantFaceSize;
 
         vtkCellArray *cell_arr = nullptr;
 
@@ -175,11 +175,11 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
 
     MfxAttributeProps pointPos, vertPoint, faceLen;
     input_mesh.GetPointAttribute(kOfxMeshAttribPointPosition).FetchProperties(pointPos);
-    input_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
-    input_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
+    input_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint).FetchProperties(vertPoint);
+    input_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize).FetchProperties(faceLen);
 
     printf("MFX input (%s) has %d points, %d vertices, %d faces\n",
-           vtk_input.definition->name, inputProps.pointCount, inputProps.vertexCount, inputProps.faceCount);
+           vtk_input.definition->name, inputProps.pointCount, inputProps.cornerCount, inputProps.faceCount);
 
     // ------------------------------------------------------------------------
     // Create vtkPolyData from MFX mesh
@@ -206,11 +206,11 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
     }
 
     // copy vertices
-    if (inputProps.vertexCount > 0) {
-        vtk_input_polys->GetConnectivityArray32()->SetNumberOfValues(inputProps.vertexCount);
+    if (inputProps.cornerCount > 0) {
+        vtk_input_polys->GetConnectivityArray32()->SetNumberOfValues(inputProps.cornerCount);
         strided_copy<int, 1>(vtk_input_polys->GetConnectivityArray32()->GetVoidPointer(0),
                              vertPoint.data,
-                             inputProps.vertexCount,
+                             inputProps.cornerCount,
                              sizeof(int),
                              vertPoint.stride);
     }
@@ -220,7 +220,7 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
         vtk_input_polys->GetOffsetsArray32()->SetNumberOfValues(inputProps.faceCount + 1);
         int *offset_array = reinterpret_cast<int*>(vtk_input_polys->GetOffsetsArray32()->GetVoidPointer(0));
         int vertex_sum = 0;
-        if (inputProps.constantFaceCount == -1) {
+        if (inputProps.constantFaceSize == -1) {
             // varying face counts
             for (int i = 0; i < inputProps.faceCount; i++) {
                 offset_array[i] = vertex_sum;
@@ -229,7 +229,7 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
         } else {
             for (int i = 0; i < inputProps.faceCount; i++) {
                 offset_array[i] = vertex_sum;
-                vertex_sum += inputProps.constantFaceCount;
+                vertex_sum += inputProps.constantFaceSize;
             }
         }
         offset_array[inputProps.faceCount] = vertex_sum; // sentinel value
@@ -287,10 +287,10 @@ vtkSmartPointer<vtkPolyData> mfx_mesh_to_vtkpolydata_polys(const VtkEffectInput 
                 }
                 break;
 
-            case MfxAttributeAttachment::Vertex:
+            case MfxAttributeAttachment::Corner:
                 array->SetNumberOfTuples(vtk_input_polydata->GetNumberOfPoints());
                 vtk_input_polydata->GetPointData()->AddArray(array);
-                for (int i = 0; i < inputProps.vertexCount; i++) {
+                for (int i = 0; i < inputProps.cornerCount; i++) {
                     int p = get_attribute_value<int>(vertPoint, i, 0);
                     for (int j = 0; j < attr.componentCount; j++) {
                         switch (attr.type) {
@@ -329,8 +329,8 @@ void mfx_mesh_to_vtkpolydata(VtkEffectInput &vtk_input, MfxMesh &input_mesh) {
 // pre: no lines/polys
 static void vtkpolydata_to_mfx_mesh_pointcloud(MfxMesh &output_mesh, vtkPolyData *vtk_output_polydata) {
     auto attrib_point_position = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
-    auto attrib_vertex_point = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
-    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+    auto attrib_vertex_point = output_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint);
+    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize);
 
     MfxAttributeProps attrib_point_position_props, attrib_vertex_point_props, attrib_face_counts_props;
     attrib_point_position.FetchProperties(attrib_point_position_props);
@@ -370,8 +370,8 @@ static void vtkpolydata_to_mfx_mesh_pointcloud(MfxMesh &output_mesh, vtkPolyData
 // pre: no polys, only vtkLines, no vtkPolyLine
 static void vtkpolydata_to_mfx_mesh_wireframe(MfxMesh &output_mesh, vtkPolyData *vtk_output_polydata) {
     auto attrib_point_position = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
-    auto attrib_vertex_point = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
-    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+    auto attrib_vertex_point = output_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint);
+    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize);
 
     MfxAttributeProps attrib_point_position_props, attrib_vertex_point_props, attrib_face_counts_props;
     attrib_point_position.FetchProperties(attrib_point_position_props);
@@ -408,8 +408,8 @@ static void vtkpolydata_to_mfx_mesh_wireframe(MfxMesh &output_mesh, vtkPolyData 
 // pre: only polys, no lines
 static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_output_polydata) {
     auto attrib_point_position = output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition);
-    auto attrib_vertex_point = output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint);
-    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts);
+    auto attrib_vertex_point = output_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint);
+    auto attrib_face_counts = output_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize);
 
     MfxAttributeProps attrib_point_position_props, attrib_vertex_point_props, attrib_face_counts_props;
     attrib_point_position.FetchProperties(attrib_point_position_props);
@@ -455,7 +455,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
-            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeUByte, kOfxMeshAttribSemanticColor);
+            output_mesh.AddCornerAttribute(name, array->GetNumberOfComponents(), MfxAttributeType::UByte, MfxAttributeSemantic::Color);
         }
     }
     for (int k = 0; k < 4; k++) {
@@ -464,7 +464,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             printf("vtkpolydata_to_mfx_mesh copying attribute %s\n", name);
-            output_mesh.AddVertexAttribute(name, array->GetNumberOfComponents(), kOfxMeshAttribTypeFloat, kOfxMeshAttribSemanticTextureCoordinate);
+            output_mesh.AddCornerAttribute(name, array->GetNumberOfComponents(), MfxAttributeType::Float, MfxAttributeSemantic::TextureCoordinate);
         }
     }
 
@@ -498,7 +498,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             MfxAttributeProps attr;
-            output_mesh.GetVertexAttribute(name).FetchProperties(attr);
+            output_mesh.GetCornerAttribute(name).FetchProperties(attr);
 
             for (int i = 0; i < vertex_count; i++) {
                 int p = *(int*)(attrib_vertex_point_props.data + i*attrib_vertex_point_props.stride);
@@ -515,7 +515,7 @@ static void vtkpolydata_to_mfx_mesh_poly(MfxMesh &output_mesh, vtkPolyData *vtk_
         auto array = vtk_output_polydata->GetPointData()->GetArray(name);
         if (array != nullptr) {
             MfxAttributeProps attr;
-            output_mesh.GetVertexAttribute(name).FetchProperties(attr);
+            output_mesh.GetCornerAttribute(name).FetchProperties(attr);
 
             for (int i = 0; i < vertex_count; i++) {
                 int p = *(int*)(attrib_vertex_point_props.data + i*attrib_vertex_point_props.stride);
@@ -544,7 +544,7 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
     auto vtk_output_points = vtk_output_polydata->GetPoints();
 
     int output_point_count = 0;
-    int output_vertex_count = 0;
+    int output_corner_count = 0;
     int output_face_count = 0;
     int output_loose_edge_count = 0;
     int output_poly_count = 0;
@@ -562,11 +562,11 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
                 - vtk_output_lines->GetNumberOfCells() + 1 // subtract edges between distinct lines
         );
 
-        output_vertex_count += 2*output_loose_edge_count;
+        output_corner_count += 2*output_loose_edge_count;
         output_face_count += output_loose_edge_count;
     }
     if (vtk_output_polys != nullptr) {
-        output_vertex_count += vtk_output_polys->GetNumberOfConnectivityIds();
+        output_corner_count += vtk_output_polys->GetNumberOfConnectivityIds();
         output_face_count += vtk_output_polys->GetNumberOfCells();
         output_poly_count += vtk_output_polys->GetNumberOfCells();
     }
@@ -574,17 +574,17 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
     // Allocate output MFX mesh
     int output_no_loose_edge = (output_loose_edge_count > 0) ? 0 : 1;
     int output_constant_face_count = (output_poly_count == 0 && output_loose_edge_count > 0) ? 2 : -1;  // TODO take further advantage of this
-    output_mesh.Allocate(output_point_count, output_vertex_count, output_face_count,
+    output_mesh.Allocate(output_point_count, output_corner_count, output_face_count,
                          output_no_loose_edge, output_constant_face_count); // not a hint, this must be exact
 
     // Get output mesh data
-    MfxAttributeProps pointPos, vertPoint, faceLen;
+    MfxAttributeProps pointPos, cornerPoint, faceSize;
     output_mesh.GetPointAttribute(kOfxMeshAttribPointPosition).FetchProperties(pointPos);
-    output_mesh.GetVertexAttribute(kOfxMeshAttribVertexPoint).FetchProperties(vertPoint);
-    output_mesh.GetFaceAttribute(kOfxMeshAttribFaceCounts).FetchProperties(faceLen);
+    output_mesh.GetCornerAttribute(kOfxMeshAttribCornerPoint).FetchProperties(cornerPoint);
+    output_mesh.GetFaceAttribute(kOfxMeshAttribFaceSize).FetchProperties(faceSize);
 
-    printf("MFX output has %d points, %d vertices, %d faces\n",
-           output_point_count, output_vertex_count, output_face_count);
+    printf("MFX output has %d points, %d corners, %d faces\n",
+           output_point_count, output_corner_count, output_face_count);
 
     // copy points
     if (vtk_output_points != nullptr) {
@@ -609,8 +609,8 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
             const vtkIdType* cellPoints;
             iter->GetCurrentCell(cellSize, cellPoints);
 
-            int* mfx_output_count = (int*)(&faceLen.data[face_idx * faceLen.stride]);
-            int* mfx_output_vertex = (int*)(&vertPoint.data[vertex_idx * vertPoint.stride]);
+            int* mfx_output_count = (int*)(&faceSize.data[face_idx * faceSize.stride]);
+            int* mfx_output_vertex = (int*)(&cornerPoint.data[vertex_idx * cornerPoint.stride]);
 
             for (int i = 0; i < cellSize - 1; i++) {
                 *mfx_output_count = 2;
@@ -629,7 +629,7 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
         vtk_output_polys->ConvertTo32BitStorage();
         int poly_face_idx = 0;
         for (int i = 0; i < output_face_count; i++, face_idx++, poly_face_idx++) {
-            int* mfx_output_count = ((int*)(&faceLen.data[face_idx * faceLen.stride]));
+            int* mfx_output_count = ((int*)(&faceSize.data[face_idx * faceSize.stride]));
 
             int vtk_offset_start = vtk_output_polys->GetOffsetsArray32()->GetValue(poly_face_idx);
             int vtk_offset_end = vtk_output_polys->GetOffsetsArray32()->GetValue(poly_face_idx+1);
@@ -640,7 +640,7 @@ static void vtkpolydata_to_mfx_mesh_generic(MfxMesh &output_mesh, vtkPolyData *v
             // begin cell
             // XXX check if its polygon or something else
             for (int j = 0; j < vtk_output_count; j++, vertex_idx++) {
-                int* mfx_output_vertex = ((int*)(&vertPoint.data[vertex_idx * vertPoint.stride]));
+                int* mfx_output_vertex = ((int*)(&cornerPoint.data[vertex_idx * cornerPoint.stride]));
 
                 int vtk_output_vertex = vtk_output_polys->GetConnectivityArray32()->GetValue(vtk_offset_start + j);
                 *mfx_output_vertex = vtk_output_vertex;

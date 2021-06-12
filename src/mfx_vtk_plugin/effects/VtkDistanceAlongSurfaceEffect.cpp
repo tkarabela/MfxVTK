@@ -34,7 +34,7 @@ const char *VtkDistanceAlongSurfaceEffect::GetName() {
 
 OfxStatus
 VtkDistanceAlongSurfaceEffect::vtkDescribe(OfxParamSetHandle parameters, VtkEffectInputDef &input_mesh, VtkEffectInputDef &output_mesh) {
-    input_mesh.RequestVertexAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
+    input_mesh.RequestCornerAttribute("color0", 3, MfxAttributeType::UByte, MfxAttributeSemantic::Color, true);
 
     // TODO declare this is a deformer
 

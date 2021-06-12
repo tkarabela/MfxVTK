@@ -97,9 +97,9 @@ OfxStatus VtkEffect::Cook(OfxMeshEffectHandle instance) {
 
     // prepare input, MFX -> VTK
     for (auto &vtk_input : vtk_inputs) {
-        if (vtk_input.definition->name == kOfxMeshMainInput) {
+        if (0 == strcmp(vtk_input.definition->name, kOfxMeshMainInput)) {
             vtk_main_input = &vtk_input;
-        } else if (vtk_input.definition->name == kOfxMeshMainOutput) {
+        } else if (0 == strcmp(vtk_input.definition->name, kOfxMeshMainOutput)) {
             vtk_main_output = &vtk_input;
         }
 
